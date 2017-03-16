@@ -19,7 +19,7 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 
-		cpu0: cpu@0 {
+		cpu@0 {
 			compatible = "arm,cortex-a9";
 			device_type = "cpu";
 			reg = <0>;
@@ -33,7 +33,7 @@
 			>;
 		};
 
-		cpu1: cpu@1 {
+		cpu@1 {
 			compatible = "arm,cortex-a9";
 			device_type = "cpu";
 			reg = <1>;
@@ -99,10 +99,10 @@
 		gpio0: gpio@e000a000 {
 			compatible = "xlnx,zynq-gpio-1.0";
 			#gpio-cells = <2>;
+			#interrupt-cells = <2>;
 			clocks = <&clkc 42>;
 			gpio-controller;
 			interrupt-controller;
-			#interrupt-cells = <2>;
 			interrupt-parent = <&intc>;
 			interrupts = <0 20 4>;
 			reg = <0xe000a000 0x1000>;
@@ -231,6 +231,45 @@
 				reg = <0xe1000000 0x1000000>;
 				#address-cells = <0x1>;
 				#size-cells = <0x1>;
+				partition@nand-whole {
+					label = "whole";
+					reg = <0x0 0xfb80000>;
+					read-only;
+				};
+				partition@nand-fsbl-bit-uboot {
+					label = "boot";
+					reg = <0x0 0x500000>;
+				};
+				partition@nand-fsbl-bit-uboot-secure {
+					label = "secureboot";
+					reg = <0x500000 0x500000>;
+					read-only;
+				};
+				partition@nand-u-boot-env {
+					label = "u-boot-env";
+					reg = <0xa00000 0x40000>;
+				};
+				partition@nand-linux-kernel {
+					label = "kernel";
+					reg = <0xa40000 0x500000>;
+				};
+				partition@nand-devicetree {
+					label = "devicetree";
+					reg = <0xf40000 0x40000>;
+				};
+				partition@nand-ramdisk {
+					label = "ramdisk";
+					reg = <0xf80000 0x600000>;
+				};
+				partition@nand-rootfs {
+					label = "rootfs";
+					reg = <0x1580000 0xe600000>;
+				};
+				partition@nand-badblocktable {
+					label = "bbt";
+					reg = <0xff00000 0x100000>;
+				};
+				
 			};
 			nor0: flash@e2000000 {
 				status = "disabled";
@@ -271,7 +310,7 @@
 			interrupt-parent = <&intc>;
 			interrupts = <0 24 4>;
 			reg = <0xe0100000 0x1000>;
-			broken-adma2;
+			wp-inverted;
 		};
 
 		sdhci1: sdhci@e0101000 {
@@ -282,13 +321,12 @@
 			interrupt-parent = <&intc>;
 			interrupts = <0 47 4>;
 			reg = <0xe0101000 0x1000>;
-			broken-adma2;
 		};
 
 		slcr: slcr@f8000000 {
 			#address-cells = <1>;
 			#size-cells = <1>;
-			compatible = "xlnx,zynq-slcr", "syscon", "simple-mfd";
+			compatible = "xlnx,zynq-slcr", "syscon", "simple-bus";
 			reg = <0xF8000000 0x1000>;
 			ranges;
 			clkc: clkc@100 {
