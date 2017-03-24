@@ -41,6 +41,7 @@ enum chips { tmp421, tmp422, tmp423, tmp441, tmp442 };
 #define TMP421_STATUS_REG			0x08
 #define TMP421_CONFIG_REG_1			0x09
 #define TMP421_CONVERSION_RATE_REG		0x0B
+#define TMP421_SOFT_RESET_REG			0xFC
 #define TMP421_MANUFACTURER_ID_REG		0xFE
 #define TMP421_DEVICE_ID_REG			0xFF
 
@@ -142,6 +143,14 @@ static ssize_t show_temp_value(struct device *dev,
 	return sprintf(buf, "%d\n", temp);
 }
 
+static int tmp421_init_client(struct i2c_client *client);
+static void tmp421_soft_reset_client(struct i2c_client *client)
+{
+	/* Writing any value to register 0xfc will initiates a software reset */
+	i2c_smbus_write_byte_data(client, TMP421_SOFT_RESET_REG, 0x55);
+	(void)tmp421_init_client(client);
+}
+
 static ssize_t show_fault(struct device *dev,
 			  struct device_attribute *devattr, char *buf)
 {
@@ -152,8 +161,10 @@ static ssize_t show_fault(struct device *dev,
 	 * The OPEN bit signals a fault. This is bit 0 of the temperature
 	 * register (low byte).
 	 */
-	if (data->temp[index] & 0x01)
+	if (data->temp[index] & 0x01) {
+		(void)tmp421_soft_reset_client(data->client);
 		return sprintf(buf, "1\n");
+	}
 	else
 		return sprintf(buf, "0\n");
 }
