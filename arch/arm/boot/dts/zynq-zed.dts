@@ -12,6 +12,7 @@
  * GNU General Public License for more details.
  */
 /dts-v1/;
+#include "pl.dtsi"
 #include "zynq-7000.dtsi"
 
 / {
@@ -21,6 +22,10 @@
 	aliases {
 		ethernet0 = &gem0;
 		serial0 = &uart1;
+		serial1 = &uart0;
+		serial2 = &axi_uart16550_0;
+		serial3 = &axi_uart16550_1;
+		serial4 = &axi_uart16550_2;
 		spi0 = &qspi;
 		mmc0 = &sdhci0;
 	};
@@ -31,7 +36,8 @@
 	};
 
 	chosen {
-		bootargs = "";
+		/*bootargs = "noinitrd root=/dev/mmcblk0p2 rw earlyprintk rootfstype=ext3 rootwait devtmpfs.mount=1";*/
+		bootargs = "noinitrd root=/dev/mtdblock7 rw earlyprintk rootfstype=jffs2 rootwait devtmpfs.mount=1";
 		stdout-path = "serial0:115200n8";
 	};
 
@@ -45,17 +51,21 @@
 };
 
 &clkc {
+	fclk-enable = <0x1>;
 	ps-clk-frequency = <33333333>;
 };
 
 &gem0 {
-	status = "okay";
+	local-mac-address = [00 0a 35 00 00 00];
 	phy-mode = "rgmii-id";
-	phy-handle = <&ethernet_phy>;
+	status = "okay";
+	xlnx,ptp-enet-clock = <0x69f6bcb>;
+};
 
-	ethernet_phy: ethernet-phy@0 {
-		reg = <0>;
-	};
+&gpio0 {
+	emio-gpio-width = <6>;
+	gpio-mask-high = <0x0>;
+	gpio-mask-low = <0x5600>;
 };
 
 &qspi {
@@ -97,7 +107,33 @@
 	status = "okay";
 };
 
+&uart0 {
+	current-speed = <115200>;
+	device_type = "serial";
+	status = "okay";
+};
+
 &uart1 {
+	current-speed = <115200>;
+	device_type = "serial";
+	status = "okay";
+};
+
+&axi_uart16550_0 {
+	current-speed = <115200>;
+	device_type = "serial";
+	status = "okay";
+};
+
+&axi_uart16550_1 {
+	current-speed = <115200>;
+	device_type = "serial";
+	status = "okay";
+};
+
+&axi_uart16550_2 {
+	current-speed = <115200>;
+	device_type = "serial";
 	status = "okay";
 };
 
@@ -106,3 +142,118 @@
 	dr_mode = "host";
 	usb-phy = <&usb_phy0>;
 };
+
+&smcc {
+	status = "okay";
+};
+
+&nand0 {
+	status = "okay";
+};
+
+&i2c0 {
+    status = "okay";
+    dtt@48 {
+        compatible = "national,lm75";
+        reg = <0x48>;
+    };
+    eeprom@28 {
+        compatible = "at,24c08";
+        reg = <0x28>;
+    };
+    i2c-switch@70 {
+        compatible = "nxp,pca9542";
+        #address-cells = <1>;
+        #size-cells = <0>;
+        reg = <0x70>;
+        i2c-mux-idle-disconnect;
+
+        i2c@0 {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            reg = <0>;
+            tmp423@4c {
+                compatible = "ti,tmp423";
+                reg = <0x4c>;
+            };
+        };
+
+        i2c@1 {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            reg = <1>;
+
+            tmp423@4c {
+                compatible = "ti,tmp423";
+                reg = <0x4c>;
+            };
+        };
+    };
+
+    i2c-switch@71 {
+        compatible = "nxp,pca9542";
+        #address-cells = <1>;
+        #size-cells = <0>;
+        reg = <0x71>;
+        i2c-mux-idle-disconnect;
+
+        i2c@0 {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            reg = <0>;
+            tmp423@4c {
+                compatible = "ti,tmp423";
+                reg = <0x4c>;
+            };
+        };
+
+        i2c@1 {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            reg = <1>;
+
+            tmp423@4c {
+                compatible = "ti,tmp423";
+                reg = <0x4c>;
+            };
+        };
+    };
+
+    i2c-switch@72 {
+        compatible = "nxp,pca9542";
+        #address-cells = <1>;
+        #size-cells = <0>;
+        reg = <0x72>;
+        i2c-mux-idle-disconnect;
+
+        i2c@0 {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            reg = <0>;
+            tmp423@4c {
+                compatible = "ti,tmp423";
+                reg = <0x4c>;
+            };
+        };
+
+        i2c@1 {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            reg = <1>;
+
+            tmp423@4c {
+                compatible = "ti,tmp423";
+                reg = <0x4c>;
+            };
+        };
+    };
+};
+
+&i2c1 {
+    status = "okay";
+    eeprom@50 {
+        compatible = "at,24c08";
+        reg = <0x50>;
+    };
+};
+
