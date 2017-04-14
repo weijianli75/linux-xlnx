@@ -161,6 +161,18 @@
         compatible = "at,24c08";
         reg = <0x28>;
     };
+    tmp421@4c {
+        compatible = "ti,tmp421";
+        reg = <0x4c>;
+    };
+    tmp421@4d {
+        compatible = "ti,tmp421";
+        reg = <0x4d>;
+    };
+    tmp421@4e {
+        compatible = "ti,tmp421";
+        reg = <0x4e>;
+    };
     i2c-switch@70 {
         compatible = "nxp,pca9542";
         #address-cells = <1>;
@@ -251,9 +263,9 @@
 
 &i2c1 {
     status = "okay";
-    eeprom@50 {
+    eeprom@28 {
         compatible = "at,24c08";
-        reg = <0x50>;
+        reg = <0x28>;
     };
 };
 
