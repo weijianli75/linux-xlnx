@@ -18,6 +18,7 @@
 #include <linux/slab.h>
 #include <linux/kdev_t.h>
 #include <linux/idr.h>
+#include <linux/of.h>
 #include <linux/hwmon.h>
 #include <linux/gfp.h>
 #include <linux/spinlock.h>
@@ -99,6 +100,7 @@ hwmon_device_register_with_groups(struct device *dev, const char *name,
 {
 	struct hwmon_device *hwdev;
 	int err, id;
+	int params, addr, channel;
 
 	/* Do not accept invalid characters in hwmon name attribute */
 	if (name && (!strlen(name) || strpbrk(name, "-* \t\n")))
@@ -120,6 +122,15 @@ hwmon_device_register_with_groups(struct device *dev, const char *name,
 	hwdev->dev.groups = groups;
 	hwdev->dev.of_node = dev ? dev->of_node : NULL;
 	dev_set_drvdata(&hwdev->dev, drvdata);
+	params = sscanf(dev->of_node->full_name, "/amba/i2c@e0004000/tmp421@%x", &addr);
+	if (params == 1) {
+		id = addr - 0x4c;
+	} else {
+		params = sscanf(dev->of_node->full_name, "/amba/i2c@e0004000/i2c-switch@%x/i2c@%x/tmp423@4c", &addr, &channel);
+		if (params == 2) {
+			id = (addr - 0x70) * 2 + channel;
+		}
+	}
 	dev_set_name(&hwdev->dev, HWMON_ID_FORMAT, id);
 	err = device_register(&hwdev->dev);
 	if (err)
