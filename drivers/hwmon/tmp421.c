@@ -143,6 +143,66 @@ static ssize_t show_temp_value(struct device *dev,
 	return sprintf(buf, "%d\n", temp);
 }
 
+static ssize_t show_id_value(struct device *dev,
+                             struct device_attribute *devattr, char *buf)
+{
+	struct tmp421_data *data = dev_get_drvdata(dev);
+	struct i2c_client *client = data->client;
+        u16 id_value;
+
+	mutex_lock(&data->update_lock);
+
+        id_value = (i2c_smbus_read_byte_data(client, TMP421_MANUFACTURER_ID_REG) << 8) | 
+                i2c_smbus_read_byte_data(client, TMP421_DEVICE_ID_REG);
+
+	mutex_unlock(&data->update_lock);
+
+	return sprintf(buf, "%04x\n", id_value);
+}
+
+static ssize_t temp_show_reg(struct device *dev,
+                             struct device_attribute *devattr, char *buf)
+{
+	struct tmp421_data *data = dev_get_drvdata(dev);
+	struct i2c_client *client = data->client;
+        u8 mid, did, sts, conf1, convrate;
+
+	mutex_lock(&data->update_lock);
+
+        mid = i2c_smbus_read_byte_data(client, TMP421_MANUFACTURER_ID_REG);
+        did = i2c_smbus_read_byte_data(client, TMP421_DEVICE_ID_REG);
+        sts = i2c_smbus_read_byte_data(client, TMP421_STATUS_REG);
+        conf1 = i2c_smbus_read_byte_data(client, TMP421_CONFIG_REG_1);
+        convrate = i2c_smbus_read_byte_data(client, TMP421_CONVERSION_RATE_REG);
+
+	mutex_unlock(&data->update_lock);
+
+	return sprintf(buf, "MID=%02x DID=%02x STATUS=%02x CONFIG_REG_1=%02x CONVERSION_RATE_REG=%02x\n", 
+                       mid, did, sts, conf1, convrate);
+}
+
+static ssize_t temp_set_reg(struct device *dev,
+                            struct device_attribute *devattr,
+                            const char *buf, size_t count)
+{
+	struct tmp421_data *data = dev_get_drvdata(dev);
+	struct i2c_client *client = data->client;
+	unsigned long val;
+
+	if (kstrtol(buf, 16, &val) < 0)
+		return -EINVAL;
+
+        printk("temp_set_reg: reg=%02lx, val=%02lx\n", (val >> 8) & 0xff, val & 0xff);
+
+	mutex_lock(&data->update_lock);
+
+        i2c_smbus_write_byte_data(client, (val >> 8) & 0xff, val & 0xff);
+
+	mutex_unlock(&data->update_lock);
+
+        return count;
+}
+
 static int tmp421_init_client(struct i2c_client *client);
 static void tmp421_soft_reset_client(struct i2c_client *client)
 {
@@ -186,6 +246,8 @@ static umode_t tmp421_is_visible(struct kobject *kobj, struct attribute *a,
 	return 0;
 }
 
+static SENSOR_DEVICE_ATTR(id, S_IRUGO, show_id_value, NULL, 0);
+static SENSOR_DEVICE_ATTR(reg, S_IWUSR | S_IRUGO, temp_show_reg, temp_set_reg, 0);
 static SENSOR_DEVICE_ATTR(temp1_input, S_IRUGO, show_temp_value, NULL, 0);
 static SENSOR_DEVICE_ATTR(temp2_input, S_IRUGO, show_temp_value, NULL, 1);
 static SENSOR_DEVICE_ATTR(temp2_fault, S_IRUGO, show_fault, NULL, 1);
@@ -195,6 +257,8 @@ static SENSOR_DEVICE_ATTR(temp4_input, S_IRUGO, show_temp_value, NULL, 3);
 static SENSOR_DEVICE_ATTR(temp4_fault, S_IRUGO, show_fault, NULL, 3);
 
 static struct attribute *tmp421_attr[] = {
+	&sensor_dev_attr_id.dev_attr.attr,
+	&sensor_dev_attr_reg.dev_attr.attr,
 	&sensor_dev_attr_temp1_input.dev_attr.attr,
 	&sensor_dev_attr_temp2_input.dev_attr.attr,
 	&sensor_dev_attr_temp2_fault.dev_attr.attr,
