@@ -94,7 +94,7 @@ struct lm75_data {
 static int lm75_read_value(struct i2c_client *client, u8 reg);
 static int lm75_write_value(struct i2c_client *client, u8 reg, u16 value);
 static struct lm75_data *lm75_update_device(struct device *dev);
-
+static int lm75_detect_id(struct i2c_client *client, u16 *id);
 
 /*-----------------------------------------------------------------------*/
 
@@ -115,6 +115,60 @@ static int lm75_read_temp(void *dev, int *temp)
 	*temp = lm75_reg_to_mc(data->temp[0], data->resolution);
 
 	return 0;
+}
+
+static ssize_t show_id(struct device *dev, 
+                       struct device_attribute *da, char *buf)
+{
+	struct lm75_data *data = dev_get_drvdata(dev);
+	struct i2c_client *client = data->client;
+    u16 id_value;
+
+	mutex_lock(&data->update_lock);
+
+    lm75_detect_id(client, &id_value);
+
+	mutex_unlock(&data->update_lock);
+
+	return sprintf(buf, "%04x\n", id_value);
+}
+
+static ssize_t temp_show_reg(struct device *dev,
+                             struct device_attribute *da, char *buf)
+{
+	struct lm75_data *data = dev_get_drvdata(dev);
+	struct i2c_client *client = data->client;
+    unsigned int reg_conf;
+
+	mutex_lock(&data->update_lock);
+
+    reg_conf = lm75_read_value(client, LM75_REG_CONF);
+
+	mutex_unlock(&data->update_lock);
+
+	return sprintf(buf, "reg_conf=0x%x\n", reg_conf);
+}
+
+static ssize_t temp_set_reg(struct device *dev,
+                            struct device_attribute *da,
+                            const char *buf, size_t count)
+{
+	struct lm75_data *data = dev_get_drvdata(dev);
+	struct i2c_client *client = data->client;
+	unsigned long val;
+
+	if (kstrtol(buf, 16, &val) < 0)
+		return -EINVAL;
+
+    printk("temp_set_reg: reg=%02lx, val=%04lx\n", (val >> 16) & 0xff, val & 0xffff);
+
+	mutex_lock(&data->update_lock);
+
+    lm75_write_value(client, (val >> 16) & 0xff, val & 0xffff);
+
+	mutex_unlock(&data->update_lock);
+
+    return count;
 }
 
 static ssize_t show_temp(struct device *dev, struct device_attribute *da,
@@ -163,6 +217,9 @@ static ssize_t set_temp(struct device *dev, struct device_attribute *da,
 	return count;
 }
 
+static SENSOR_DEVICE_ATTR(id, S_IRUGO, show_id, NULL, 0);
+static SENSOR_DEVICE_ATTR(reg, S_IWUSR | S_IRUGO, 
+                          temp_show_reg, temp_set_reg, 0);
 static SENSOR_DEVICE_ATTR(temp1_max, S_IWUSR | S_IRUGO,
 			show_temp, set_temp, 1);
 static SENSOR_DEVICE_ATTR(temp1_max_hyst, S_IWUSR | S_IRUGO,
@@ -170,6 +227,8 @@ static SENSOR_DEVICE_ATTR(temp1_max_hyst, S_IWUSR | S_IRUGO,
 static SENSOR_DEVICE_ATTR(temp1_input, S_IRUGO, show_temp, NULL, 0);
 
 static struct attribute *lm75_attrs[] = {
+	&sensor_dev_attr_id.dev_attr.attr,
+	&sensor_dev_attr_reg.dev_attr.attr,
 	&sensor_dev_attr_temp1_input.dev_attr.attr,
 	&sensor_dev_attr_temp1_max.dev_attr.attr,
 	&sensor_dev_attr_temp1_max_hyst.dev_attr.attr,
@@ -193,8 +252,12 @@ lm75_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	struct lm75_data *data;
 	int status;
 	u8 set_mask, clr_mask;
+    u16 chip_id;
 	int new;
 	enum lm75_type kind = id->driver_data;
+
+    if (lm75_detect_id(client, &chip_id) != 0)
+        return -EIO;
 
 	if (!i2c_check_functionality(client->adapter,
 			I2C_FUNC_SMBUS_BYTE_DATA | I2C_FUNC_SMBUS_WORD_DATA))
@@ -355,6 +418,47 @@ static const struct i2c_device_id lm75_ids[] = {
 MODULE_DEVICE_TABLE(i2c, lm75_ids);
 
 #define LM75A_ID 0xA1
+#define LM75_ID  0x75
+
+#define TMP421_MANUFACTURER_ID_REG		0xFE
+#define TMP421_MANUFACTURER_ID			0x55
+
+/*
+ * Now, we do the ID detection. There is no identification-
+ * dedicated register so we have to rely on several tricks:
+ * unused bits, registers cycling over 8-address boundaries,
+ * addresses 0x04-0x07 returning the last read value.
+ * The cycling+unused addresses combination is not tested,
+ * since it would significantly slow the detection down and would
+ * hardly add any value.
+ *
+ * Return 0 if detection is successful, -ENODEV otherwise
+ */
+static int lm75_detect_id(struct i2c_client *client, u16 *id)
+{
+	u8 reg;
+	int conf;
+
+    *id = 0xffff; /* Unknown device ID */
+
+    /*
+     * Because the address of tmp421/423 is the same as lm75, 
+     * so we need to make sure that it is not tmp421/423.
+     * If detected tmp421/tmp423, return -ENODEV
+     */
+	reg = i2c_smbus_read_byte_data(client, TMP421_MANUFACTURER_ID_REG);
+	if (reg == TMP421_MANUFACTURER_ID)
+		return -ENODEV;
+
+	/* Unused bits: should be zero */
+	conf = i2c_smbus_read_byte_data(client, 1);
+	if (conf & 0xe0)
+		return -ENODEV;
+
+    *id = LM75_ID;
+
+    return 0;
+}
 
 /* Return 0 if detection is successful, -ENODEV otherwise */
 static int lm75_detect(struct i2c_client *new_client,
