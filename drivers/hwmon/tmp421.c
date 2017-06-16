@@ -282,6 +282,11 @@ static const struct attribute_group *tmp421_groups[] = {
 static int tmp421_init_client(struct i2c_client *client)
 {
 	int config, config_orig;
+    u8 reg;
+
+	reg = i2c_smbus_read_byte_data(client, TMP421_MANUFACTURER_ID_REG);
+	if (reg != TMP421_MANUFACTURER_ID)
+		return -ENODEV;
 
 	/* Set the conversion rate to 2 Hz */
 	i2c_smbus_write_byte_data(client, TMP421_CONVERSION_RATE_REG, 0x05);
@@ -371,6 +376,12 @@ static int tmp421_probe(struct i2c_client *client,
 	struct device *hwmon_dev;
 	struct tmp421_data *data;
 	int err;
+
+    /*
+     * FIXME: to avoid address confilcting, we defined tmp421/tmp423
+     * with another addresses, and so we correct the address here.
+     */
+    client->addr |= 0x4c;
 
 	data = devm_kzalloc(dev, sizeof(struct tmp421_data), GFP_KERNEL);
 	if (!data)

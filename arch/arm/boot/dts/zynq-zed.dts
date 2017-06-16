@@ -153,26 +153,51 @@
 
 &i2c0 {
     status = "okay";
-    dtt@48 {
-        compatible = "national,lm75";
-        reg = <0x48>;
-    };
+    clock-frequency = <100000>;
+
     eeprom@28 {
         compatible = "at,24c08";
         reg = <0x28>;
     };
-    tmp421@4c {
-        compatible = "ti,tmp421";
+
+    lm75@48 {
+        compatible = "national,lm75";
+        reg = <0x48>;
+    };
+    lm75@4c {
+        compatible = "national,lm75";
         reg = <0x4c>;
     };
-    tmp421@4d {
-        compatible = "ti,tmp421";
+    lm75@49 {
+        compatible = "national,lm75";
+        reg = <0x49>;
+    };
+    lm75@4d {
+        compatible = "national,lm75";
         reg = <0x4d>;
     };
-    tmp421@4e {
-        compatible = "ti,tmp421";
+    lm75@4a {
+        compatible = "national,lm75";
+        reg = <0x4a>;
+    };
+    lm75@4e {
+        compatible = "national,lm75";
         reg = <0x4e>;
     };
+
+    tmp421@40 {
+        compatible = "ti,tmp421";
+        reg = <0x40>;
+    };
+    tmp421@41 {
+        compatible = "ti,tmp421";
+        reg = <0x41>;
+    };
+    tmp421@42 {
+        compatible = "ti,tmp421";
+        reg = <0x42>;
+    };
+
     i2c-switch@70 {
         compatible = "nxp,pca9542";
         #address-cells = <1>;
@@ -184,9 +209,9 @@
             #address-cells = <1>;
             #size-cells = <0>;
             reg = <0>;
-            tmp423@4c {
+            tmp423@44 {
                 compatible = "ti,tmp423";
-                reg = <0x4c>;
+                reg = <0x44>;
             };
         };
 
@@ -195,9 +220,9 @@
             #size-cells = <0>;
             reg = <1>;
 
-            tmp423@4c {
+            tmp423@44 {
                 compatible = "ti,tmp423";
-                reg = <0x4c>;
+                reg = <0x44>;
             };
         };
     };
@@ -213,9 +238,9 @@
             #address-cells = <1>;
             #size-cells = <0>;
             reg = <0>;
-            tmp423@4c {
+            tmp423@44 {
                 compatible = "ti,tmp423";
-                reg = <0x4c>;
+                reg = <0x44>;
             };
         };
 
@@ -224,9 +249,9 @@
             #size-cells = <0>;
             reg = <1>;
 
-            tmp423@4c {
+            tmp423@44 {
                 compatible = "ti,tmp423";
-                reg = <0x4c>;
+                reg = <0x44>;
             };
         };
     };
@@ -242,9 +267,9 @@
             #address-cells = <1>;
             #size-cells = <0>;
             reg = <0>;
-            tmp423@4c {
+            tmp423@44 {
                 compatible = "ti,tmp423";
-                reg = <0x4c>;
+                reg = <0x44>;
             };
         };
 
@@ -253,9 +278,9 @@
             #size-cells = <0>;
             reg = <1>;
 
-            tmp423@4c {
+            tmp423@44 {
                 compatible = "ti,tmp423";
-                reg = <0x4c>;
+                reg = <0x44>;
             };
         };
     };
