@@ -164,25 +164,13 @@
         compatible = "national,lm75";
         reg = <0x48>;
     };
-    lm75@4c {
-        compatible = "national,lm75";
-        reg = <0x4c>;
-    };
     lm75@49 {
         compatible = "national,lm75";
         reg = <0x49>;
     };
-    lm75@4d {
-        compatible = "national,lm75";
-        reg = <0x4d>;
-    };
     lm75@4a {
         compatible = "national,lm75";
         reg = <0x4a>;
-    };
-    lm75@4e {
-        compatible = "national,lm75";
-        reg = <0x4e>;
     };
 
     tmp421@40 {

@@ -125,11 +125,7 @@ hwmon_device_register_with_groups(struct device *dev, const char *name,
 
 	params = sscanf(dev->of_node->full_name, "/amba/i2c@e0004000/lm75@%x", &addr);
 	if (params == 1) {
-		if (addr <= 0x4a) {
-			id = (addr - 0x48) * 2;
-		} else {
-			id = (addr - 0x4c) * 2 + 1;
-		}
+        id = addr - 0x48;
 	}
 
 	params = sscanf(dev->of_node->full_name, "/amba/i2c@e0004000/tmp421@%x", &addr);
