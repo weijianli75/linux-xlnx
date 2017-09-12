@@ -160,6 +160,22 @@
         reg = <0x28>;
     };
 
+	eeprom@50 {
+		compatible = "atmel,24c01";
+		reg = <0x50>;
+		pagesize = <8>;
+	};
+	eeprom@51 {
+		compatible = "atmel,24c01";
+		reg = <0x51>;
+		pagesize = <8>;
+	};
+	eeprom@52 {
+		compatible = "atmel,24c01";
+		reg = <0x52>;
+		pagesize = <8>;
+	};
+
     lm75@48 {
         compatible = "national,lm75";
         reg = <0x48>;
