@@ -296,6 +296,11 @@
         compatible = "at,24c08";
         reg = <0x28>;
     };
+
+    p6@2c {
+        compatible = "gp,p6-power";
+        reg = <0x2c>;
+    };
 };
 
 &watchdog0 {
