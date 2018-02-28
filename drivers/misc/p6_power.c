@@ -13,6 +13,7 @@
 #include <linux/slab.h>
 #include <linux/i2c.h>
 #include <linux/mutex.h>
+#include <linux/delay.h>
 
 /*
  * P6 Version ID
@@ -49,6 +50,71 @@ struct p6_data {
 };
 
 /*
+ * P6 CRC & I2C Operations
+ */
+static u8 basic_crc(u8 remainder, unsigned char nbyte)
+{
+    char i = 0;
+    remainder ^= nbyte;
+    for (i = 8; i > 0; --i) {
+        if (remainder & 0x80) {
+            remainder = (remainder << 1) ^ 0x7;
+        }
+        else {
+            remainder = (remainder << 1);
+        }
+    }
+    return remainder;
+}
+
+static u8 calc_crc(unsigned char i2c_addr, unsigned char i2c_command,
+                   unsigned char *data, unsigned int len)
+{
+    unsigned char crc = 0, i;
+    crc = basic_crc(crc, (i2c_addr << 1) + 0);
+    crc = basic_crc(crc, i2c_command);
+    crc = basic_crc(crc, (i2c_addr << 1) + 1);
+    for (i = 0; i < len; i++) {
+        crc = basic_crc(crc, *data++);
+    }
+    return crc;
+}
+
+static void p6_i2c_smbus_read_i2c_block_data(const struct i2c_client *client, u8 command, u8 length, u8 *values)
+{
+    int retry_count = 100;
+    u8 crc_calc = 0;
+
+    while (retry_count--) {
+        i2c_smbus_read_i2c_block_data(client, command, length, values);
+        crc_calc = calc_crc(client->addr, command, values, length - 1);
+        if (crc_calc == *(values + length - 1))
+            break;
+        printk("p6_i2c_smbus_read_i2c_block_data: crc checking error, command = 0x%x, crc_read = 0x%02x, crc_calc = 0x%02x\n",
+               command, *(values + length - 1), crc_calc);
+        msleep(1);
+    }
+}
+
+static s32 p6_i2c_smbus_read_word_data(const struct i2c_client *client, u8 command)
+{
+    int retry_count = 100;
+    int data;
+    u8 crc_calc = 0;
+
+    while (retry_count--) {
+        data = i2c_smbus_read_word_data(client, command);
+        crc_calc = calc_crc(client->addr, command, (unsigned char *)&data, 1);
+        if (crc_calc == ((data >> 8) & 0xff))
+            break;
+        printk("p6_i2c_smbus_read_word_data: crc checking error, command = 0x%x, crc_read = 0x%02x, crc_calc = 0x%02x\n",
+               command, (data >> 8) & 0xff, crc_calc);
+        msleep(1);
+    }
+    return data;
+}
+
+/*
  * Management functions
  */
 static ssize_t show_list_all(struct device *dev,
@@ -63,42 +129,47 @@ static ssize_t show_list_all(struct device *dev,
 
     c -= snprintf(buf + PAGE_SIZE - c, c, "Client Address     = 0x%02x\n", client->addr);
 
-    reg = i2c_smbus_read_word_data(client, P6_CMD_READ_VERSION);
+    reg = p6_i2c_smbus_read_word_data(client, P6_CMD_READ_VERSION);
     c -= snprintf(buf + PAGE_SIZE - c, c, "Power Version      = 0x%02x\n", reg & 0xff);
 
-    reg = i2c_smbus_read_word_data(client, P6_CMD_READ_STATUS);
+    reg = p6_i2c_smbus_read_word_data(client, P6_CMD_READ_STATUS);
     c -= snprintf(buf + PAGE_SIZE - c, c, "Power Status       = 0x%02x (%s)\n", reg & 0xff, (reg & 0x1) ? "on" : "off");
 
-    reg = i2c_smbus_read_word_data(client, P6_CMD_READ_ERRORCODE);
+    reg = p6_i2c_smbus_read_word_data(client, P6_CMD_READ_ERRORCODE);
     c -= snprintf(buf + PAGE_SIZE - c, c, "Power ErrorCode    = 0x%02x\n", reg & 0xff);
-    
-    i2c_smbus_read_i2c_block_data(client, P6_CMD_READ_VOUT_12V, 3, (u8 *)&reg);
+
+    p6_i2c_smbus_read_i2c_block_data(client, P6_CMD_READ_VOUT_12V, 3, (u8 *)&reg);
     d0 = (reg & 0xffff) / 100;
     d1 = (reg & 0xffff) - d0 * 100;
     c -= snprintf(buf + PAGE_SIZE - c, c, "Power VOUT_12V     = 0x%04x (%d.%02d V)\n", reg & 0xffff, d0, d1);
 
-    i2c_smbus_read_i2c_block_data(client, P6_CMD_READ_VOUT, 3, (u8 *)&reg);
+    p6_i2c_smbus_read_i2c_block_data(client, P6_CMD_READ_VOUT, 3, (u8 *)&reg);
     d0 = (reg & 0xffff) / 100;
     d1 = (reg & 0xffff) - d0 * 100;
     c -= snprintf(buf + PAGE_SIZE - c, c, "Power VOUT         = 0x%04x (%d.%02d V)\n", reg & 0xffff, d0, d1);
 
-    i2c_smbus_read_i2c_block_data(client, P6_CMD_READ_IOUT, 3, (u8 *)&reg);
+    p6_i2c_smbus_read_i2c_block_data(client, P6_CMD_SET_VOUT, 3, (u8 *)&reg);
+    d0 = (reg & 0xffff) / 100;
+    d1 = (reg & 0xffff) - d0 * 100;
+    c -= snprintf(buf + PAGE_SIZE - c, c, "Power VOUT_SET     = 0x%04x (%d.%02d V)\n", reg & 0xffff, d0, d1);
+
+    p6_i2c_smbus_read_i2c_block_data(client, P6_CMD_READ_IOUT, 3, (u8 *)&reg);
     c -= snprintf(buf + PAGE_SIZE - c, c, "Power IOUT         = 0x%04x (%d A)\n", reg & 0xffff, reg & 0xffff);
 
-    i2c_smbus_read_i2c_block_data(client, P6_CMD_READ_POUT, 3, (u8 *)&reg);
+    p6_i2c_smbus_read_i2c_block_data(client, P6_CMD_READ_POUT, 3, (u8 *)&reg);
     c -= snprintf(buf + PAGE_SIZE - c, c, "Power POUT         = 0x%04x (%d W)\n", reg & 0xffff, reg & 0xffff);
 
-    i2c_smbus_read_i2c_block_data(client, P6_CMD_READ_TEMP0, 3, (u8 *)&reg);
+    p6_i2c_smbus_read_i2c_block_data(client, P6_CMD_READ_TEMP0, 3, (u8 *)&reg);
     d0 = (reg & 0xffff) / 10;
     d1 = (reg & 0xffff) - d0 * 10;
     c -= snprintf(buf + PAGE_SIZE - c, c, "Power TEMP0        = 0x%04x (%d.%01d ^C)\n", reg & 0xffff, d0, d1);
 
-    i2c_smbus_read_i2c_block_data(client, P6_CMD_READ_TEMP1, 3, (u8 *)&reg);
+    p6_i2c_smbus_read_i2c_block_data(client, P6_CMD_READ_TEMP1, 3, (u8 *)&reg);
     d0 = (reg & 0xffff) / 10;
     d1 = (reg & 0xffff) - d0 * 10;
     c -= snprintf(buf + PAGE_SIZE - c, c, "Power TEMP1        = 0x%04x (%d.%01d ^C)\n", reg & 0xffff, d0, d1);
 
-    i2c_smbus_read_i2c_block_data(client, P6_CMD_READ_FAN_PWM_DUTY, 3, (u8 *)&reg);
+    p6_i2c_smbus_read_i2c_block_data(client, P6_CMD_READ_FAN_PWM_DUTY, 3, (u8 *)&reg);
     c -= snprintf(buf + PAGE_SIZE - c, c, "Power FAN_PWM_DUTY = 0x%04x (%d%%)\n", reg & 0xff, reg & 0xff);
 
     mutex_unlock(&data->update_mutex);
@@ -116,7 +187,7 @@ static ssize_t show_version(struct device *dev,
 
     mutex_lock(&data->update_mutex);
 
-    reg = i2c_smbus_read_word_data(client, P6_CMD_READ_VERSION);
+    reg = p6_i2c_smbus_read_word_data(client, P6_CMD_READ_VERSION);
     c -= snprintf(buf + PAGE_SIZE - c, c, "%02x\n", reg & 0xff);
 
     mutex_unlock(&data->update_mutex);
@@ -134,7 +205,7 @@ static ssize_t show_on_off(struct device *dev, struct device_attribute *da,
 
     mutex_lock(&data->update_mutex);
 
-    reg = i2c_smbus_read_word_data(client, P6_CMD_READ_STATUS);
+    reg = p6_i2c_smbus_read_word_data(client, P6_CMD_READ_STATUS);
     c -= snprintf(buf + PAGE_SIZE - c, c, "%s\n", (reg & 0x1) ? "on" : "off");
 
     mutex_unlock(&data->update_mutex);
@@ -165,11 +236,11 @@ static ssize_t show_vout(struct device *dev, struct device_attribute *da,
 	struct p6_data *data = dev_get_drvdata(dev);
 	struct i2c_client *client = data->client;
     ssize_t c = PAGE_SIZE;
-    u32 reg;
+    u32 reg = 0;
 
     mutex_lock(&data->update_mutex);
 
-    i2c_smbus_read_i2c_block_data(client, P6_CMD_READ_VOUT, 3, (u8 *)&reg);
+    p6_i2c_smbus_read_i2c_block_data(client, P6_CMD_READ_VOUT, 3, (u8 *)&reg);
     c -= snprintf(buf + PAGE_SIZE - c, c, "%d\n", reg & 0xffff);
 
     mutex_unlock(&data->update_mutex);
@@ -192,6 +263,24 @@ static ssize_t store_vout(struct device *dev, struct device_attribute *da,
     mutex_unlock(&data->update_mutex);
 
 	return count;
+}
+
+static ssize_t show_vout_set(struct device *dev, struct device_attribute *da,
+                             char *buf)
+{
+	struct p6_data *data = dev_get_drvdata(dev);
+	struct i2c_client *client = data->client;
+    ssize_t c = PAGE_SIZE;
+    u32 reg = 0;
+
+    mutex_lock(&data->update_mutex);
+
+    p6_i2c_smbus_read_i2c_block_data(client, P6_CMD_SET_VOUT, 3, (u8 *)&reg);
+    c -= snprintf(buf + PAGE_SIZE - c, c, "%d\n", reg & 0xffff);
+
+    mutex_unlock(&data->update_mutex);
+
+	return PAGE_SIZE - c;;
 }
 
 static ssize_t show_clear_fault(struct device *dev, struct device_attribute *da,
@@ -217,6 +306,7 @@ static DEVICE_ATTR(list_all, S_IRUGO, show_list_all, NULL);
 static DEVICE_ATTR(version, S_IRUGO, show_version, NULL);
 static DEVICE_ATTR(on_off, S_IWUSR | S_IRUGO, show_on_off, store_on_off);
 static DEVICE_ATTR(vout, S_IWUSR | S_IRUGO, show_vout, store_vout);
+static DEVICE_ATTR(vout_set, S_IRUGO, show_vout_set, NULL);
 static DEVICE_ATTR(clear_fault, S_IWUSR | S_IRUGO, show_clear_fault, store_clear_fault);
 
 static struct attribute *p6_attributes[] = {
@@ -224,6 +314,7 @@ static struct attribute *p6_attributes[] = {
 	&dev_attr_version.attr,
 	&dev_attr_on_off.attr,
 	&dev_attr_vout.attr,
+	&dev_attr_vout_set.attr,
 	&dev_attr_clear_fault.attr,
 	NULL
 };
@@ -240,7 +331,7 @@ static int p6_init_client(struct i2c_client *client)
 {
     int ret;
 
-	ret = i2c_smbus_read_byte_data(client, P6_CMD_READ_VERSION);
+    ret = p6_i2c_smbus_read_word_data(client, P6_CMD_READ_VERSION);
     if ((ret & 0xff) != P6_VERSION_ID) {
         printk("p6_init_client failed ret = 0x%x\n", ret);
         return -1;
