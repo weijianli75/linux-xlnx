@@ -70,7 +70,8 @@ static u8 basic_crc(u8 remainder, unsigned char nbyte)
 static u8 calc_crc(unsigned char i2c_addr, unsigned char i2c_command,
                    unsigned char *data, unsigned int len)
 {
-    unsigned char crc = 0, i;
+    int i;
+    unsigned char crc = 0;
     crc = basic_crc(crc, (i2c_addr << 1) + 0);
     crc = basic_crc(crc, i2c_command);
     crc = basic_crc(crc, (i2c_addr << 1) + 1);
@@ -80,38 +81,46 @@ static u8 calc_crc(unsigned char i2c_addr, unsigned char i2c_command,
     return crc;
 }
 
-static void p6_i2c_smbus_read_i2c_block_data(const struct i2c_client *client, u8 command, u8 length, u8 *values)
+static s32 p6_i2c_smbus_read_i2c_block_data(const struct i2c_client *client, u8 command, u8 length, u8 *values)
 {
-    int retry_count = 100;
+    int retry_count = 10;
+    s32 status = 0;
     u8 crc_calc = 0;
 
     while (retry_count--) {
-        i2c_smbus_read_i2c_block_data(client, command, length, values);
-        crc_calc = calc_crc(client->addr, command, values, length - 1);
-        if (crc_calc == *(values + length - 1))
-            break;
-        printk("p6_i2c_smbus_read_i2c_block_data: crc checking error, command = 0x%x, crc_read = 0x%02x, crc_calc = 0x%02x\n",
-               command, *(values + length - 1), crc_calc);
+        status = i2c_smbus_read_i2c_block_data(client, command, length, values);
+        if (status >= 0) {
+            crc_calc = calc_crc(client->addr, command, values, length - 1);
+            if (crc_calc == *(values + length - 1)) break;
+            printk("p6_i2c_smbus_read_i2c_block_data: crc checking error, command = 0x%x, crc_read = 0x%02x, crc_calc = 0x%02x\n",
+                   command, *(values + length - 1), crc_calc);
+        }
         msleep(1);
     }
+
+    if (status < 0)
+		return status;
+
+    return length;
 }
 
 static s32 p6_i2c_smbus_read_word_data(const struct i2c_client *client, u8 command)
 {
-    int retry_count = 100;
-    int data;
+    int retry_count = 10;
+    s32 status = 0;
     u8 crc_calc = 0;
 
     while (retry_count--) {
-        data = i2c_smbus_read_word_data(client, command);
-        crc_calc = calc_crc(client->addr, command, (unsigned char *)&data, 1);
-        if (crc_calc == ((data >> 8) & 0xff))
-            break;
-        printk("p6_i2c_smbus_read_word_data: crc checking error, command = 0x%x, crc_read = 0x%02x, crc_calc = 0x%02x\n",
-               command, (data >> 8) & 0xff, crc_calc);
+        status = i2c_smbus_read_word_data(client, command);
+        if (status >= 0) {
+            crc_calc = calc_crc(client->addr, command, (unsigned char *)&status, 1);
+            if (crc_calc == ((status >> 8) & 0xff)) break;
+            printk("p6_i2c_smbus_read_word_data: crc checking error, command = 0x%x, crc_read = 0x%02x, crc_calc = 0x%02x\n",
+                   command, (status >> 8) & 0xff, crc_calc);
+        }
         msleep(1);
     }
-    return data;
+    return status;
 }
 
 /*
@@ -290,7 +299,7 @@ static ssize_t show_clear_fault(struct device *dev, struct device_attribute *da,
 }
 
 static ssize_t store_clear_fault(struct device *dev, struct device_attribute *da,
-                               const char *buf, size_t count)
+                                 const char *buf, size_t count)
 {
 	struct p6_data *data = dev_get_drvdata(dev);
 	struct i2c_client *client = data->client;
@@ -329,11 +338,11 @@ static const struct attribute_group p6_attr_group = {
 
 static int p6_init_client(struct i2c_client *client)
 {
-    int ret;
+    s32 status;
 
-    ret = p6_i2c_smbus_read_word_data(client, P6_CMD_READ_VERSION);
-    if ((ret & 0xff) != P6_VERSION_ID) {
-        printk("p6_init_client failed ret = 0x%x\n", ret);
+    status = p6_i2c_smbus_read_word_data(client, P6_CMD_READ_VERSION);
+    if (status < 0) {
+        printk("p6_init_client failed status = 0x%x\n", status);
         return -1;
     }
 
@@ -343,8 +352,7 @@ static int p6_init_client(struct i2c_client *client)
 /*
  * I2C init/probing/exit functions
  */
-static int p6_power_probe(struct i2c_client *client,
-                                    const struct i2c_device_id *id)
+static int p6_power_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	struct p6_data *data;
 	int err = 0;
