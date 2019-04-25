@@ -4,14 +4,6 @@
 
 menu "Misc devices"
 
-config P6_POWER
-	tristate "P6 Power Supply Driver"
-	help
-	  Say Y here if you have a p6 on your board.
-
-	  To compile this driver as a module, choose M here: the
-	  module will be called p6_power.
-
 config SENSORS_LIS3LV02D
 	tristate
 	depends on INPUT

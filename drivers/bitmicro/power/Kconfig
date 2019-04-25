@@ -1,0 +1,34 @@
+
+
+menuconfig BITMICRO_POWER_SUPPLY
+    bool "bitmicro power supply"
+    default y
+    ---help---
+      bitmicro power supply
+      
+if BITMICRO_POWER_SUPPLY
+
+config GENERAL_POWER
+    bool "general power"
+    default y
+    help
+       general power driver
+
+config P6_POWER
+    bool "p6 power"
+    help
+       p10 and p20 power
+       
+config MEIC_POWER
+    bool "meic power"
+    default y
+    help
+       meic power
+       
+config HUNTKEY_POWER
+    bool "huntkey power"
+    default y
+    help
+       huntkey power
+
+endif # BITMICRO_POWER_SUPPLY

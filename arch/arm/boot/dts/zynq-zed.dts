@@ -301,6 +301,19 @@
         compatible = "gp,p6-power";
         reg = <0x2c>;
     };
+
+    general_power@55 {
+        compatible = "gp,general_power";
+        reg = <0x55>;
+    };
+    meic@5a {
+        compatible = "gp,meic-power";
+        reg = <0x5a>;
+    };
+    huntkey@58 {
+        compatible = "gp,huntkey-power";
+        reg = <0x58>;
+    };
 };
 
 &watchdog0 {

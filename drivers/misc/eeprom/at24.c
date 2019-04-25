@@ -481,6 +481,8 @@ static int at24_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	struct at24_data *at24;
 	int err;
 	unsigned i, num_addresses;
+	int ret;
+	u8 test_byte;
 
 	if (client->dev.platform_data) {
 		chip = *(struct at24_platform_data *)client->dev.platform_data;
@@ -625,6 +627,16 @@ static int at24_probe(struct i2c_client *client, const struct i2c_device_id *id)
 			err = -EADDRINUSE;
 			goto err_clients;
 		}
+	}
+
+	/*
+	 * Perform a one-byte test read to verify that the
+	 * chip is functional.
+	 */
+	ret = at24_read(at24, &test_byte, 0, 1);
+	if (ret <= 0) {
+		err = -ENODEV;
+		goto err_clients;
 	}
 
 	err = sysfs_create_bin_file(&client->dev.kobj, &at24->bin);
