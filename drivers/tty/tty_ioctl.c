@@ -270,7 +270,7 @@ static void unset_locked_termios(struct ktermios *termios,
  * include/asm/termbits.h file.
  */
 static const speed_t baud_table[] = {
-	0, 6000000, 187500, 375000, 12000000, 150, 200, 300, 600, 1200, 1800, 2400, 4800,
+	0, 50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800, 2400, 4800,
 	9600, 19200, 38400, 57600, 115200, 230400, 460800,
 #ifdef __sparc__
 	76800, 153600, 307200, 614400, 921600
