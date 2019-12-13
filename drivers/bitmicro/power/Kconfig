@@ -8,6 +8,10 @@ menuconfig BITMICRO_POWER_SUPPLY
       
 if BITMICRO_POWER_SUPPLY
 
+config DCDC_POWER
+    bool "dcdc power"
+    default y
+
 config GENERAL_POWER
     bool "general power"
     default y
@@ -30,5 +34,11 @@ config HUNTKEY_POWER
     default y
     help
        huntkey power
+
+config PMBUS_POWER
+    bool "pmbus power"
+    default y
+    help
+       pmbus power
 
 endif # BITMICRO_POWER_SUPPLY

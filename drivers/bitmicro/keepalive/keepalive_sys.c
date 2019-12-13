@@ -1,4 +1,5 @@
 #include "keepalive.h"
+#include <bitmicro.h>
 
 
 static ssize_t enable_show(struct kobject *kobj, struct kobj_attribute *attr,
@@ -39,7 +40,7 @@ int keepalive_sys_init(void)
 {
     int retval;
 
-    keepalive_kobj = kobject_create_and_add("keepalive", kernel_kobj);
+    keepalive_kobj = kobject_create_and_add("keepalive", bitmicro_kobj);
     if (!keepalive_kobj)
         return -ENOMEM;
 

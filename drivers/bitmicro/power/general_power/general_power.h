@@ -14,6 +14,8 @@
 //0x0D    输入过压保护点（可选） 2Byte R
 //0x0E    输入过流保护点（可选） 2Byte R
 //0x0F    输入欠压保护点（可选） 2Byte R
+//0x10    清除错误码   1byte W
+//0x11    主输出功率   2byte R
 //0x70    电源状态（详见2.2.2 状态定义）  4Byte R
 //0x80    软件版本    16Byte R
 //0x81    硬件版本    16Byte R
@@ -39,6 +41,8 @@ enum {
     REG_OVER_VIN,
     REG_OVER_IIN,
     REG_UNDER_VIN,
+    REG_CLEAR_ERROR     = 0x10,
+    REG_POWER,
     REG_STATUS          = 0x70,
     REG_SW_VERSION      = 0x80,
     REG_HW_VERSION,
@@ -55,6 +59,7 @@ struct general_power {
     unsigned char version;
     int common_error;
 
+    int vender_id;
     int is_upgrating;
     char *upgrade_path;
     int voltage;
@@ -75,6 +80,8 @@ struct general_power {
     char buf[BUF_SIZE];
 };
 
+int general_power_i2c_write(struct general_power *power, void *buf, int size);
+int general_power_i2c_read(struct general_power *power, char reg, void *rbuf, int rsize);
 int general_power_read(struct general_power *power, char reg, void *buf, int size);
 int general_power_write(struct general_power *power, char reg, void *buf, int size);
 short general_power_read_word(struct general_power *power, char reg);
@@ -85,8 +92,10 @@ int general_power_get_voltage(struct general_power *power);
 int general_power_get_voltage_set(struct general_power *power);
 int general_power_set_voltage(struct general_power *power, int vol);
 int general_power_get_current(struct general_power *power);
+int general_power_get_power(struct general_power *power);
 int general_power_get_status(struct general_power *power);
 int general_power_get_errors(struct general_power *power);
+int general_power_set_errors(struct general_power *power, int val);
 int general_power_get_fan_speed(struct general_power *power, int id);
 int general_power_get_temp(struct general_power *power, int i);
 int general_power_get_model(struct general_power *power, char *buf);

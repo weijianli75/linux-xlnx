@@ -160,21 +160,41 @@
         reg = <0x28>;
     };
 
-	eeprom@50 {
-		compatible = "atmel,24c01";
-		reg = <0x50>;
-		pagesize = <8>;
-	};
-	eeprom@51 {
-		compatible = "atmel,24c01";
-		reg = <0x51>;
-		pagesize = <8>;
-	};
-	eeprom@52 {
-		compatible = "atmel,24c01";
-		reg = <0x52>;
-		pagesize = <8>;
-	};
+    dcdc0@50 {
+        compatible = "isl,dc-dc","atmel,24c01";
+        reg = <0x50>;
+        pagesize = <8>;
+    };
+
+    dcdc1@51 {
+        compatible = "isl,dc-dc","atmel,24c01";
+        reg = <0x51>;
+        pagesize = <8>;
+    };
+
+    dcdc2@52 {
+        compatible = "isl,dc-dc","atmel,24c01";
+        reg = <0x52>;
+        pagesize = <8>;
+    };
+
+    eeprom@54 {
+        compatible = "atmel,24c01";
+        reg = <0x54>;
+        pagesize = <8>;
+    };
+    
+    eeprom@55 {
+        compatible = "atmel,24c01";
+        reg = <0x55>;
+        pagesize = <8>;
+    };
+
+    eeprom@56 {
+        compatible = "atmel,24c01";
+        reg = <0x56>;
+        pagesize = <8>;
+    };
 
     lm75@48 {
         compatible = "national,lm75";

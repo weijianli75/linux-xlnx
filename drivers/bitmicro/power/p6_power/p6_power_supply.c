@@ -116,8 +116,22 @@ static int p6_power_get_property(struct bitmicro_power_supply *psy,
         val->intval = p6_power_get_temp(data, 2);
         break;
     case POWER_SUPPLY_SW_VERSION:
-        p6_power_get_sw_version(data, data->sw_version);
-        val->strval = data->sw_version;
+        if (p6_power_get_sw_version(data, data->sw_version) < 0)
+            ret = -EINVAL;
+        else
+            val->strval = data->sw_version;
+        break;
+    case POWER_SUPPLY_HW_VERSION:
+        if (p6_power_get_hw_version(data, data->hw_version) < 0)
+            ret = -EINVAL;
+        else
+            val->strval = data->hw_version;
+        break;
+    case POWER_SUPPLY_SERIAL_NO:
+        if (p6_power_get_serial_no(data, data->serial_no) < 0)
+            ret = -EINVAL;
+        else
+            val->strval = data->serial_no;
         break;
     case POWER_SUPPLY_VERSION:
         val->intval = p6_power_get_version(data);
@@ -154,6 +168,9 @@ static int p6_power_set_property(struct bitmicro_power_supply *psy,
     case POWER_SUPPLY_ENABLE:
         p6_power_set_enable(data, val->intval);
         break;
+    case POWER_SUPPLY_ERRORS:
+        p6_power_set_errors(data);
+        break;
     default:
         ret = -EINVAL;
     }
@@ -177,13 +194,15 @@ static enum power_supply_property test_power_ac_props[] = {
         POWER_SUPPLY_TEMP1,
         POWER_SUPPLY_TEMP2,
         POWER_SUPPLY_VERSION,
+        POWER_SUPPLY_HW_VERSION,
         POWER_SUPPLY_SW_VERSION,
+        POWER_SUPPLY_SERIAL_NO,
         POWER_SUPPLY_DEBUG,
 };
 
 static struct power_supply_desc power_desc[] = {
     [0] = {
-        .vender = GOSPOWER,
+        .vender = VENDER_GOSPOWER,
         .name = "PX",
         .properties = test_power_ac_props,
         .num_properties = ARRAY_SIZE(test_power_ac_props),
@@ -193,26 +212,40 @@ static struct power_supply_desc power_desc[] = {
 };
 
 int p6_power_supply_init(struct p6_data *data) {
+    char model[16] = {0};
+    int vout = 12;
+    int pout_max = 0;
+    const char *name = power_desc->name;
+
     struct bitmicro_power_supply *psy;
     switch (data->version) {
     case P10_VERSION:
-        power_desc[0].name = "P10";
+        name = "P10";
+        pout_max = 2400;
         break;
     case P11_VERSION:
-        power_desc[0].name = "P11";
+        name = "P11";
+        pout_max = 2400;
         break;
     case P20_VERSION:
-        power_desc[0].name = "P20";
+    case P21_VERSION_OLD:
+        name = "P20";
+        pout_max = 3600;
         break;
     case P21_VERSION:
-        power_desc[0].name = "P21";
+        name = "P21";
+        pout_max = 3600;
         break;
     default:
         /* default name: PX */
         break;
     }
 
-    psy = bitmicro_power_supply_register(NULL, power_desc);
+    snprintf(model, sizeof(model), "%s-%d-%d-%c",
+            name, vout, pout_max, 'C');
+    power_supply_desc_init(power_desc, model, "GOSPOWER");
+
+    psy = bitmicro_power_supply_register(power_desc);
     if (psy == NULL)
         return -1;
 

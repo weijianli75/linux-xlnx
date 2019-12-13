@@ -143,8 +143,9 @@ static enum power_supply_property meic_power_props[] = {
 
 static struct power_supply_desc power_desc[] = {
     [0] = {
-        .vender = MEIC,
+        .vender = VENDER_MEIC,
         .name = "P10",
+        .model = "P10-12-2200-C",
         .properties = meic_power_props,
         .num_properties = ARRAY_SIZE(meic_power_props),
         .get_property = meic_power_get_property,
@@ -179,7 +180,7 @@ int meic_power_probe(struct i2c_client *client, const struct i2c_device_id *id)
         goto exit;
     }
 
-    psy = bitmicro_power_supply_register(NULL, power_desc);
+    psy = bitmicro_power_supply_register(power_desc);
     if (psy == NULL)
         goto exit;
     psy->drv_data = power;

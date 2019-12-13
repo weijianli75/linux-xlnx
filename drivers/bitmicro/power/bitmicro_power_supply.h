@@ -11,6 +11,7 @@
 #include <linux/delay.h>
 #include <linux/swab.h>
 #include <linux/fs.h>
+#include <linux/uaccess.h>
 
 #include "bitmicro_power_info.h"
 
@@ -22,7 +23,13 @@ struct bitmicro_power_supply;
 
 enum power_supply_property {
     POWER_SUPPLY_VOUT,
+    POWER_SUPPLY_VOUT0,
+    POWER_SUPPLY_VOUT1,
+    POWER_SUPPLY_VOUT2,
     POWER_SUPPLY_VOUT_SET,
+    POWER_SUPPLY_VOUT_SET0,
+    POWER_SUPPLY_VOUT_SET1,
+    POWER_SUPPLY_VOUT_SET2,
     POWER_SUPPLY_VOUT_MAX,
     POWER_SUPPLY_VOUT_MIN,
     POWER_SUPPLY_VIN,
@@ -31,6 +38,9 @@ enum power_supply_property {
     POWER_SUPPLY_POUT,
     POWER_SUPPLY_PIN,
     POWER_SUPPLY_ENABLE,
+    POWER_SUPPLY_ENABLE0,
+    POWER_SUPPLY_ENABLE1,
+    POWER_SUPPLY_ENABLE2,
 
     POWER_SUPPLY_FAN_SPEED0,
     POWER_SUPPLY_FAN_SPEED1,
@@ -40,7 +50,7 @@ enum power_supply_property {
     POWER_SUPPLY_TEMP3,
     POWER_SUPPLY_TEMP4,
     POWER_SUPPLY_VENDER,
-
+    
     /**
      * hex type
      */
@@ -55,22 +65,55 @@ enum power_supply_property {
      */
     POWER_SUPPLY_HW_VERSION,
     POWER_SUPPLY_SW_VERSION,
+    POWER_SUPPLY_SERIAL_NO,
     POWER_SUPPLY_MODEL,
     POWER_SUPPLY_DEBUG,
     POWER_SUPPLY_UPGRADE,
 
     POWER_SUPPLY_NAME,
 };
-
+/*
+0   输出过温保护0
+1   输出过温保护1
+2   输出过温保护2
+3   输出过流保护0
+4   输出过流保护1
+5   输出过流保护2
+6   输出过压保护
+7   输出低压保护
+10  输入过温保护0
+11  输入过温保护1
+12  输入过温保护2
+13  输入过流保护0
+14  输入过流保护1
+15  输入过压保护0
+16  输入过压保护1
+17  输入欠压保护0
+18  输入欠压保护1
+20  风扇错误0
+21  风扇错误1
+ */
 enum {
-    POWER_ERROR_OVER_TOUT,          // 输出过温保护
-    POWER_ERROR_OVER_IOUT,          // 输出过流保护
-    POWER_ERROR_OVER_VOUT,          // 输出过压保护
-    POWER_ERROR_OVER_TIN,           // 输入过温保护
-    POWER_ERROR_OVER_IIN,           // 输入过流保护
-    POWER_ERROR_OVER_VIN,           // 输入过压保护
-    POWER_ERROR_UNDER_VIN,          // 输入欠压保护
-    POWER_ERROR_FAN,                // 风扇错误
+    POWER_ERROR_OVER_TOUT0,             // 输出过温保护0
+    POWER_ERROR_OVER_TOUT1,             // 输出过温保护1
+    POWER_ERROR_OVER_TOUT2,             // 输出过温保护2
+    POWER_ERROR_OVER_IOUT0,             // 输出过流保护0
+    POWER_ERROR_OVER_IOUT1,             // 输出过流保护1
+    POWER_ERROR_OVER_IOUT2,             // 输出过流保护2
+    POWER_ERROR_OVER_VOUT,              // 输出过压保护
+    POWER_ERROR_UNDER_VOUT,             // 输出低压保护
+    POWER_ERROR_UNBALANCE_IOUT,         // 输出电流不平衡
+    POWER_ERROR_OVER_TIN0 = 10,         // 输入过温保护0
+    POWER_ERROR_OVER_TIN1,              // 输入过温保护1
+    POWER_ERROR_OVER_TIN2,              // 输入过温保护2
+    POWER_ERROR_OVER_IIN0,              // 输入过流保护0
+    POWER_ERROR_OVER_IIN1,              // 输入过流保护1
+    POWER_ERROR_OVER_VIN0,              // 输入过压保护0
+    POWER_ERROR_OVER_VIN1,              // 输入过压保护1
+    POWER_ERROR_UNDER_VIN0,             // 输入欠压保护0
+    POWER_ERROR_UNDER_VIN1,             // 输入欠压保护1
+    POWER_ERROR_FAN0 = 20,              // 风扇错误0
+    POWER_ERROR_FAN1,                   // 风扇错误1
 
     POWER_ERROR_XFER_WARNIGN     = 30,     // 传输告警
     POWER_ERROR_XFER_ERROR       = 31,     // 传输错误
@@ -89,7 +132,11 @@ union power_supply_propval {
 
 struct power_supply_desc {
     int vender;
-    const char *name;
+    const char* name;
+    const char* model;
+    int vout;
+    int pout_max;
+    char efficiency;
     enum power_supply_property *properties;
     size_t num_properties;
 
@@ -102,6 +149,7 @@ struct power_supply_desc {
 };
 
 struct bitmicro_power_supply {
+    struct kobject kobj;
     const struct power_supply_desc *desc;
 
     char **supplied_to;
@@ -109,18 +157,13 @@ struct bitmicro_power_supply {
 
     /* Driver private data */
     void *drv_data;
-
-    /* private */
-    struct device dev;
-    struct work_struct changed_work;
-    bool changed;
-    bool initialized;
 };
 
-void bitmicro_power_supply_init_attrs(struct device_type *dev_type);
+int power_supply_desc_init(struct power_supply_desc *desc,
+        char model[16], char vender[16]);
+int bitmicro_power_supply_init_attrs(struct kobject *kobj);
 struct bitmicro_power_supply *
-bitmicro_power_supply_register(struct device *parent,
-                               const struct power_supply_desc *desc);
+bitmicro_power_supply_register(const struct power_supply_desc *desc);
 
 int bitmicro_power_supply_get_property(struct bitmicro_power_supply *psy,
                 enum power_supply_property psp,

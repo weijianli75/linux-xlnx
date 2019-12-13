@@ -24,7 +24,7 @@ static unsigned int next_data_pos = 0;
 static unsigned int data_high_addr = 0, data_low_addr = 0;
 static char upgrade_status[256];
 
-static int upgrade_retries;
+static int upgrade_retries = 10;
 static int upgrade_started;
 static int upgrade_finished;
 static int upgrade_success_count;
@@ -50,8 +50,8 @@ static void init_upgrade_state(void)
 
 static void update_upgrade_status(unsigned int command, unsigned int data, int pass)
 {
-    memset(upgrade_status, 0, sizeof(upgrade_status));
-    sprintf(upgrade_status, "start:%d cmd:%08x data:%08x pass:%d finish:%d success_count:%d retry_count:%d:%d fail_count:%d",
+//    memset(upgrade_status, 0, sizeof(upgrade_status));
+    printk("start:%d cmd:%08x data:%08x pass:%d finish:%d success_count:%d retry_count:%d:%d fail_count:%d",
             upgrade_started, command, data, pass, upgrade_finished, upgrade_success_count, upgrade_cmd_retry_count, upgrade_data_retry_count, upgrade_fail_count);
 }
 
@@ -250,6 +250,59 @@ static void pack_upgrade_command(u8 *buf, u32 command, u32 data)
     *buf = 0x66;
 }
 
+__attribute__((unused)) static void dump_buf(char *buf, int size, int line) {
+    int i;
+
+    printk("=============%s:%d============\n", __func__, __LINE__);
+
+    for (i = 0; i < size; i++) {
+        printk("0x%x, ", buf[i]);
+        if (!((i+1) % 8))
+            printk("\n");
+    }
+
+    printk("\n=============end===============\n");
+}
+
+static int parser_reply(u8 *buffer, u32 cmd_mask, u32 cmd_val, u32 data_mask, u32 data_val,
+                        u32 *reply_command, u32 *reply_data)
+{
+    int i = 0, start_pos = 0, verify_pass = 0;
+
+    while (start_pos < REPLY_PACKET_BUFFER_SIZE - 12) {
+        // Verify PACKET ID
+        for (i = start_pos; i < REPLY_PACKET_BUFFER_SIZE - 12; i++) {
+            if (*(u32 *)(buffer + i) == cpu_to_be32(REPLY_PACKET_ID)) {
+                verify_pass = 1;
+                break;
+            }
+        }
+        start_pos = i + 4;
+
+        // Verify reply_command
+        if (verify_pass) {
+            verify_pass = 0;
+            for (i = start_pos; i < REPLY_PACKET_BUFFER_SIZE - 8; i++) {
+                if ((be32_to_cpu(*(u32 *)(buffer + i)) & cmd_mask) == cmd_val
+                    && (be32_to_cpu(*(u32 *)(buffer + i + 4)) & data_mask) == data_val) {
+                    verify_pass = 1;
+                    *reply_command = be32_to_cpu(*(u32 *)(buffer + i));
+                    *reply_data = be32_to_cpu(*(u32 *)(buffer + i + 4));
+                    printk("----0x%x, 0x%x\n", be32_to_cpu(*(u32 *)(buffer + i)), *reply_command);
+                    printk("----0x%x, 0x%x\n", be32_to_cpu(*(u32 *)(buffer + i + 4)), *reply_data);
+                    break;
+                }
+            }
+            start_pos = i + 4;
+        }
+
+        if (verify_pass)
+            break;
+    }
+
+    return verify_pass;
+}
+
 static int verify_reply_packet(u8 *buffer, u32 reply_command, u32 reply_data)
 {
     int i = 0, start_pos = 0, verify_pass = 0;
@@ -295,6 +348,45 @@ static int verify_reply_packet(u8 *buffer, u32 reply_command, u32 reply_data)
     return verify_pass;
 }
 
+static int get_command_reply(struct p6_data *pdata, u32 command, u32 data,
+        u32 cmd_mask, u32 cmd_val, u32 data_mask, u32 data_val,
+        u32 *reply_command, u32 *reply_data, int retries_count)
+{
+    struct i2c_client *client = pdata->client;
+    u8 command_packet_buffer[COMMAND_PACKET_BUFFER_SIZE];
+    u8 reply_packet_buffer[REPLY_PACKET_BUFFER_SIZE];
+    int status;
+
+    while (retries_count--) {
+        // Send command & data packet
+        pack_upgrade_command(command_packet_buffer, command, data);
+//        printk("==============write===================\n");
+//        dump_buf(command_packet_buffer, 16, __LINE__);
+        i2c_master_send(client,  command_packet_buffer, 16);
+
+        // Waiting and verifying reply
+        memset(reply_packet_buffer, 0, REPLY_PACKET_BUFFER_SIZE);
+        i2c_master_recv(client, reply_packet_buffer, REPLY_PACKET_BUFFER_SIZE);
+//        printk("==============read===================\n");
+//        dump_buf(reply_packet_buffer, REPLY_PACKET_BUFFER_SIZE, __LINE__);
+        status = parser_reply(reply_packet_buffer, cmd_mask, cmd_val,
+                    data_mask, data_val, reply_command, reply_data);
+        if (status)
+            break;
+
+        upgrade_cmd_retry_count++;
+    }
+
+    if ((retries_count == 0) && (status == 0))
+        upgrade_fail_count++;
+    else
+        upgrade_success_count++;
+
+    update_upgrade_status(command, data, status);
+
+    return status ? 0 : -1;
+}
+
 static int send_command_to_power(struct p6_data *pdata, u32 command, u32 data, u32 reply_command, u32 reply_data, int retries_count)
 {
     struct i2c_client *client = pdata->client;
@@ -310,7 +402,6 @@ static int send_command_to_power(struct p6_data *pdata, u32 command, u32 data, u
         // Waiting and verifying reply
         memset(reply_packet_buffer, 0, REPLY_PACKET_BUFFER_SIZE);
         i2c_master_recv(client, reply_packet_buffer, REPLY_PACKET_BUFFER_SIZE);
-
         if ((status = verify_reply_packet(reply_packet_buffer, reply_command, reply_data)))
             break;
 
@@ -359,6 +450,34 @@ static int send_data_to_power(struct p6_data *pdata, u32 command, u32 data, u32 
     return status;
 }
 
+int p6_get_boot_info(struct p6_data *pdata, struct boot_data *boot_data) {
+    u32 reply_command, reply_data;
+
+    int ret = get_command_reply(pdata, 0x3F000000, 0x00000077,
+                0xFF000000, 0xBF000000, 0x000000FF, 0x00000077,
+                    &reply_command, &reply_data, 10);
+    if (ret < 0)
+        return ret;
+
+    pdata->in_boot = 1;
+    boot_data->version = (reply_command >> 16) & 0xFF;
+    boot_data->sw_version = (reply_command >> 8) & 0xFF;
+    boot_data->hw_version = (reply_command >> 0) & 0xFF;
+    boot_data->boot_version = (reply_data >> 24) & 0xFF;
+
+    pdata->version = boot_data->version;
+    snprintf(pdata->sw_version, sizeof(pdata->sw_version), "1022%02x.009", boot_data->sw_version);
+    snprintf(pdata->hw_version, sizeof(pdata->hw_version), "%02x", boot_data->hw_version);
+
+    printk("=============%s=====0x%x, 0x%x=======\n", __func__, reply_command, reply_data);
+    printk("version: 0x%x\n", boot_data->version);
+    printk("sw_version: 0x%x\n", boot_data->sw_version);
+    printk("hw_version: 0x%x\n", boot_data->hw_version);
+    printk("boot_version: 0x%x\n", boot_data->boot_version);
+
+    return 0;
+}
+
 static void reset_power_to_execute(struct p6_data *pdata)
 {
     send_command_to_power(pdata, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 1);
@@ -371,6 +490,7 @@ static ssize_t upgrade_power(struct p6_data *pdata, const char *buf, size_t coun
     upgrade_started = 1;
     upgrade_finished = 0;
 
+    printk("====== power start upgrade ==============\n");
     // Transfer from boot state to programming state
     send_command_to_power(pdata, 0x30000000, 0x00005555, 0xB0000000, 0x00005555, upgrade_retries);
     send_command_to_power(pdata, 0x30000000, 0x0000AAAA, 0xB0000000, 0x0000AAAA, upgrade_retries);
@@ -395,6 +515,7 @@ static ssize_t upgrade_power(struct p6_data *pdata, const char *buf, size_t coun
     upgrade_started = 0;
     upgrade_finished = 1;
     update_upgrade_status(0x37000000, 0x00000001, status);
+    printk("====== power upgrade done ==============\n");
 
     return count;
 }

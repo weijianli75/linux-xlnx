@@ -2,11 +2,13 @@
 #define __BITMICRO_POWER_INFO_H__
 
 enum power_vender {
-    UNKNOW,
-    GOSPOWER,       //高斯宝
-    MEIC,           //玛司特
-    HUNTKEY,        //航嘉
-    RSPOWER,        //瀚强
+    VENDER_UNKNOW,
+    VENDER_GOSPOWER,       //高斯宝
+    VENDER_MEIC,           //玛司特
+    VENDER_HUNTKEY,        //航嘉
+    VENDER_RSPOWER,        //瀚强
+    VENDER_ATSTEK,         //安托山
+    VENDER_DCPOWER,         //DC2DC
 };
 
 struct power_info {

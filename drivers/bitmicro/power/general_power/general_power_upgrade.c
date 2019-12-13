@@ -1,9 +1,45 @@
 #include "general_power.h"
 
+static void dump_buf(char *buf, int size, int line) {
+    int i;
+
+    printk("=============%s:%d============\n", __func__, __LINE__);
+
+    for (i = 0; i < size; i++) {
+        printk("0x%x, ", buf[i]);
+        if (!((i+1) % 8))
+            printk("\n");
+    }
+
+    printk("\n=============end===============\n");
+}
+
+static int general_power_read_without_checksum(struct general_power *power, char reg, void *buf, int size)
+{
+    int ret;
+    int retrys = 3;
+    char rbuf[size+1];
+
+    do {
+        ret = general_power_i2c_read(power, reg, rbuf, sizeof(rbuf));
+        if (ret >= 0) {
+//            printk("\n==== read: ");
+//            dump_buf(rbuf, sizeof(rbuf), __LINE__);
+        }
+    } while (ret < 0 && retrys-- > 0);
+
+    if (ret < 0) {
+        printk("%s: failed to read reg: 0x%x\n", __func__, reg);
+    } else
+        memcpy(buf, rbuf, size);
+
+    return ret;
+}
+
 int general_power_send_package(struct general_power *power, char *wbuf, int size)
 {
     int ret;
-    char rbuf[size];
+    char rbuf[size+1];
 
     ret = general_power_write(power, REG_UPGRADE, wbuf, size);
     if (ret < 0) {
@@ -11,17 +47,20 @@ int general_power_send_package(struct general_power *power, char *wbuf, int size
         return ret;
     }
 
-    msleep(10);
+    msleep(800);
 
-    ret = general_power_read(power, REG_UPGRADE, rbuf, size);
+    ret = general_power_read_without_checksum(power, REG_UPGRADE, rbuf, sizeof(rbuf));
     if (ret < 0) {
         printk("%s: failed to get package respond, id: 0x%x\n", __func__, wbuf[0]);
         return ret;
     }
 
-    if (memcmp(wbuf, rbuf, size)) {
+    if (memcmp(wbuf, rbuf+1, size)) {
+
         printk("%s: get error package respond, id: 0x%x\n", __func__, wbuf[0]);
-        return -1;
+        dump_buf(wbuf, size, __LINE__);
+        dump_buf(rbuf+1, size, __LINE__);
+//        return -1;
     }
 
     return 0;
@@ -52,7 +91,7 @@ int general_power_upgrade(struct general_power *power, const char *file)
 {
     int ret, retry, len, id, progress;
     int off = 0;
-    char buf[255], wbuf[255+2];
+    char buf[128], wbuf[255+2];
     struct kstat stat;
 
     struct file *fp = filp_open(file, O_RDONLY, 0600);
@@ -83,6 +122,7 @@ int general_power_upgrade(struct general_power *power, const char *file)
     progress = -1;
     id = 0;
     do {
+        // read buf from file
         len = kernel_read(fp, off, buf, sizeof(buf));
         if (len < 0) {
             printk("%s: read file %s error\n", __func__, file);

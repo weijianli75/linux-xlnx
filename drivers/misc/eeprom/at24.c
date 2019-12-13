@@ -25,6 +25,8 @@
 #include <linux/i2c.h>
 #include <linux/platform_data/at24.h>
 
+#include "../../bitmicro/eeprom/bitmicro_eeprom.h"
+
 /*
  * I2C EEPROMs from most vendors are inexpensive and mostly interchangeable.
  * Differences between different vendor product lines (like Atmel AT24C or
@@ -127,6 +129,7 @@ static const struct i2c_device_id at24_ids[] = {
 	{ "24c256", AT24_DEVICE_MAGIC(262144 / 8, AT24_FLAG_ADDR16) },
 	{ "24c512", AT24_DEVICE_MAGIC(524288 / 8, AT24_FLAG_ADDR16) },
 	{ "24c1024", AT24_DEVICE_MAGIC(1048576 / 8, AT24_FLAG_ADDR16) },
+	{ "dc-dc", AT24_DEVICE_MAGIC(1024 / 8, 0) },
 	{ "at24", 0 },
 	{ /* END OF LIST */ }
 };
@@ -643,6 +646,7 @@ static int at24_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	if (err)
 		goto err_clients;
 
+	bitmicro_eeprom_link(&client->dev.kobj, client->addr);
 	i2c_set_clientdata(client, at24);
 
 	dev_info(&client->dev, "%zu byte %s EEPROM, %s, %u bytes/write\n",
@@ -705,7 +709,9 @@ static int __init at24_init(void)
 	io_limit = rounddown_pow_of_two(io_limit);
 	return i2c_add_driver(&at24_driver);
 }
-module_init(at24_init);
+
+//module_init(at24_init);
+late_initcall(at24_init);//wait for dc-dc power
 
 static void __exit at24_exit(void)
 {
