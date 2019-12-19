@@ -15,7 +15,7 @@ struct dc_opt opt[NODE_TOTAL] = {
         .pdat = NULL,
         .addr = 0x50,
         .vol = 255,
-        .io = 96,
+        .io = 934,
         .en = false,
     },
 
@@ -23,7 +23,7 @@ struct dc_opt opt[NODE_TOTAL] = {
         .pdat = NULL,
         .addr = 0x51,
         .vol = 255,
-        .io = 97,
+        .io = 939,
         .en = false,
     },
 
@@ -31,7 +31,7 @@ struct dc_opt opt[NODE_TOTAL] = {
         .pdat = NULL,
         .addr = 0x52,
         .vol = 255,
-        .io = 98,
+        .io = 937,
         .en = false,
     },
 };
