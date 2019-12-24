@@ -215,6 +215,12 @@ static int dc_power_probe(struct i2c_client *client, const struct i2c_device_id 
     {
         if (client->addr == opt[i].addr)
         {
+            int ret = gpio_request(opt[i].io, NULL);
+            if (ret < 0) {
+                pr_err("GPIO %d request error for dcdc power!", opt[i].io);
+                return -1;
+            }
+               
             gpio_direction_output(opt[i].io, opt[1].en ? 1 : 0);
             data->err = 0;
             opt[i].pdat = data;
@@ -231,8 +237,13 @@ exit_kfree:
 
 static int dc_power_remove(struct i2c_client *client)
 {
+    int i;
     struct dc_data *data = (struct dc_data *)i2c_get_clientdata(client);
     kfree(data);
+
+    for (i = 0; i < NODE_TOTAL; i++)
+        gpio_free(opt[i].io);
+
     return 0;
 }
 

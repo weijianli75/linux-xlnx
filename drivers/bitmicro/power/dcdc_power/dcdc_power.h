@@ -22,7 +22,7 @@ struct dc_opt {
         struct dc_data * pdat;          
         unsigned char addr;
         unsigned char vol;
-        unsigned char io;       //enable gpio        
+        unsigned int  io;       //enable gpio        
         bool en;
 };
 
