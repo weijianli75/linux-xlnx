@@ -8,12 +8,13 @@
 #include <linux/notifier.h>
 #include <linux/err.h>
 
-int __must_check bitmicro_eeprom_link(struct kobject *kobj, unsigned short addr)
+int bitmicro_eeprom_link(struct i2c_client *client)
 {
     static struct kobject *kobj_dir = NULL;
     static int init = 0;
-    unsigned char adr = 0;
+    const __be32 *slot_be;
     char name[64];
+    int slot;
 
     if (!init)
     {
@@ -23,24 +24,18 @@ int __must_check bitmicro_eeprom_link(struct kobject *kobj, unsigned short addr)
         init = 1;
     }
 
-    switch(addr)
+    slot_be = of_get_property(client->dev.of_node, "slot", NULL);
+    if (slot_be)
+        slot = be32_to_cpup(slot_be);
+    else
+        return -1;
+
+    snprintf(name, sizeof(name), "eeprom%d", slot);
+    if (0 == sysfs_create_link(kobj_dir, &client->dev.kobj, name))
     {
-        case 0x50:adr = 0;
-            break;
-        case 0x51:adr = 1;
-            break;
-        case 0x52:adr = 2;
-            break;
-        case 0x54:adr = 0;
-            break;
-        case 0x55:adr = 1;
-            break;
-        case 0x56:adr = 2;
-            break;        
-        default: return -1;
-            break;                                                   
+        printk("dev:0x%x : bitmicro eeprom%d link\n",client->addr, slot);
+        return 0;
     }
-    snprintf(name, sizeof(name), "eeprom%d", adr);
-    return sysfs_create_link(kobj_dir, kobj, name);
+    return -1;
 }
 EXPORT_SYMBOL_GPL(bitmicro_eeprom_link);

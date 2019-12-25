@@ -32,7 +32,7 @@ int power_supply_desc_init(struct power_supply_desc *desc,
     if (strcmp(vender, "BrT") == 0) {
         desc->vender =  VENDER_ATSTEK;
     }
-    else if (strcmp(model, "GOSPOWER")) {
+    else if (strcmp(model, "GOSPOWER") == 0) {
         desc->vender = VENDER_GOSPOWER;
     }
     else {

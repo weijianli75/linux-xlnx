@@ -1,41 +1,43 @@
 #include "dcdc_power.h"
 
-static int dc_power_get_vout(struct dc_opt *opt)
+static unsigned char vout_reg_map[TYPE_TOTAL] = {
+    0,
+    REG_VAL,
+    REG_IVR,
+};
+
+int dc_power_get_vout(struct dc_opt *opt)
 {
     int ret;
     unsigned char val;
-    ret = dc_read_reg_one_byte(opt->pdat, opt->addr, REG_VAL, &val);
+
+    if (opt->type == TYPE_CAT5140)
+        cat5410_sel_switch(opt->selio);
+
+    ret = dc_read_reg_one_byte(opt->pdat,
+            vout_reg_map[opt->type], &val);
     if (ret < 0)
         return ret;
 
     return (int)val;
 }
 
-static int dc_power_set_vout(struct dc_opt *opt)
+int dc_power_set_vout(struct dc_opt *opt)
 {
     int rret, wret;
     unsigned char val;
-    wret = dc_write_reg_one_byte(opt->pdat, opt->addr, REG_VAL, opt->vol);
-    rret = dc_read_reg_one_byte(opt->pdat, opt->addr, REG_VAL, &val);
+
+    if (opt->type == TYPE_CAT5140)
+        cat5410_sel_switch(opt->selio);
+             
+    wret = dc_write_reg_one_byte(opt->pdat, 
+            vout_reg_map[opt->type], opt->vol);                    
+    rret = dc_read_reg_one_byte(opt->pdat, 
+            vout_reg_map[opt->type], &val);
     if ((rret < 0) || (opt->vol != val))
     {
         opt->pdat->err |= BIT(POWER_ERROR_XFER_WARNIGN);
         return rret;
-    }
-    return wret;
-}
-
-static int dc_power_set_enable(struct dc_opt *opt)
-{
-    int rret, wret;
-    unsigned char get;
-    unsigned char set = opt->en ? DCDC_ENABLE : DCDC_DISABLE;
-    wret = dc_write_reg_one_byte(opt->pdat, opt->addr, REG_EN, set);
-    rret = dc_read_reg_one_byte(opt->pdat, opt->addr, REG_EN, &get);
-    if ((rret < 0) || (get != set))
-    {
-        opt->pdat->err |= BIT(POWER_ERROR_XFER_WARNIGN);
-        return rret;        
     }
     return wret;
 }
@@ -70,7 +72,10 @@ static int dc_power_get_property(struct bitmicro_power_supply *psy,
 
     for (i = 0; i < NODE_TOTAL; i++)
         if (opt[i].pdat != NULL)
+        {
             mutex_lock(&opt[i].pdat->mutex);
+            break;
+        }
 
     switch (psp)
     {
@@ -88,7 +93,7 @@ static int dc_power_get_property(struct bitmicro_power_supply *psy,
             {
                 int tmp = dc_power_get_vout(&opt[i]);
                 if (tmp >= 0)
-                {                    
+                {
                     val->intval += tmp;
                     cnt++;
                     ret = 0;
@@ -96,38 +101,25 @@ static int dc_power_get_property(struct bitmicro_power_supply *psy,
             }
         }
         if (cnt > 0)
-            val->intval /= cnt;  
+            val->intval /= cnt;
         break;
     case POWER_SUPPLY_VOUT0:
+    case POWER_SUPPLY_VOUT1:    
+    case POWER_SUPPLY_VOUT2:   
+        i = psp - POWER_SUPPLY_VOUT0;
     case POWER_SUPPLY_VOUT_SET0:
-        if (opt[0].pdat == NULL)
-        {
-            ret = -1;
-            break;
-        }
-        val->intval = dc_power_get_vout(&opt[0]);
-        if (val->intval < 0)
-            ret = -1;
-        break;
-    case POWER_SUPPLY_VOUT1:
     case POWER_SUPPLY_VOUT_SET1:
-        if (opt[1].pdat == NULL)
-        {
-            ret = -1;
-            break;
-        }
-        val->intval = dc_power_get_vout(&opt[1]);
-        if (val->intval < 0)
-            ret = -1;
-        break;
-    case POWER_SUPPLY_VOUT2:
     case POWER_SUPPLY_VOUT_SET2:
-        if (opt[2].pdat == NULL)
+        if ((psp >= POWER_SUPPLY_VOUT_SET0) && 
+            (psp <= POWER_SUPPLY_VOUT_SET2))
+            i = psp - POWER_SUPPLY_VOUT_SET0;
+        
+        if (opt[i].pdat == NULL)
         {
             ret = -1;
             break;
-        }
-        val->intval = dc_power_get_vout(&opt[2]);
+        }            
+        val->intval = dc_power_get_vout(&opt[i]);
         if (val->intval < 0)
             ret = -1;
         break;
@@ -138,28 +130,15 @@ static int dc_power_get_property(struct bitmicro_power_supply *psy,
                 val->intval = 1;
         break;
     case POWER_SUPPLY_ENABLE0:
-        if (opt[0].pdat == NULL)
-        {
-            ret = -1;
-            break;
-        }
-        val->intval = opt[0].en ? 1 : 0;
-        break;
     case POWER_SUPPLY_ENABLE1:
-        if (opt[1].pdat == NULL)
-        {
-            ret = -1;
-            break;
-        }
-        val->intval = opt[1].en ? 1 : 0;
-        break;
     case POWER_SUPPLY_ENABLE2:
-        if (opt[2].pdat == NULL)
+        i = psp - POWER_SUPPLY_ENABLE0;
+        if (opt[i].pdat == NULL)
         {
             ret = -1;
             break;
         }
-        val->intval = opt[2].en ? 1 : 0;
+        val->intval = opt[i].en ? 1 : 0;
         break;
     case POWER_SUPPLY_COMMON_ERRORS:
         val->intval = 0;
@@ -178,6 +157,9 @@ static int dc_power_get_property(struct bitmicro_power_supply *psy,
         break;
     case POWER_SUPPLY_HW_VERSION:
         val->strval = hw_version;
+        for (i = 0; i < NODE_TOTAL; i++)
+            if (opt[i].name)
+                val->strval = opt[i].name;
         break;
     case POWER_SUPPLY_SW_VERSION:
         val->strval = sw_version;
@@ -189,7 +171,10 @@ static int dc_power_get_property(struct bitmicro_power_supply *psy,
 
     for (i = 0; i < NODE_TOTAL; i++)
         if (opt[i].pdat != NULL)
+        {
             mutex_unlock(&opt[i].pdat->mutex);
+            break;
+        }
 
     return ret;
 }
@@ -198,95 +183,56 @@ static int dc_power_set_property(struct bitmicro_power_supply *psy,
                                  enum power_supply_property psp,
                                  const union power_supply_propval *val)
 {
-    int ret = 0, i;
+    int ret = -1, i;
     struct dc_opt *opt = psy->drv_data;
 
     for (i = 0; i < NODE_TOTAL; i++)
         if (opt[i].pdat != NULL)
+        {
             mutex_lock(&opt[i].pdat->mutex);
+            break;
+        }
 
     switch (psp)
     {
     case POWER_SUPPLY_VOUT_SET:
-        ret = -1;
         for (i = 0; i < NODE_TOTAL; i++)
-        {
             if (opt[i].pdat != NULL)
             {
-                opt[i].vol = (unsigned char)val->intval;
+                opt[i].vol = (unsigned char)val->intval;                
                 if (dc_power_set_vout(&opt[i]) >= 0)
                     ret = 0;
             }
-        }
         break;
     case POWER_SUPPLY_VOUT_SET0:
-        if (opt[0].pdat == NULL)
-        {
-            ret = -1;
-            break;
-        }
-        opt[0].vol = (unsigned char)val->intval;
-        ret = dc_power_set_vout(&opt[0]);
-        break;
     case POWER_SUPPLY_VOUT_SET1:
-        if (opt[1].pdat == NULL)
-        {
-            ret = -1;
-            break;
-        }
-        opt[1].vol = (unsigned char)val->intval;
-        ret = dc_power_set_vout(&opt[1]);
-        break;
     case POWER_SUPPLY_VOUT_SET2:
-        if (opt[2].pdat == NULL)
-        {
-            ret = -1;
+        i = psp - POWER_SUPPLY_VOUT_SET0;
+        if (opt[i].pdat == NULL)
             break;
-        }
-        opt[2].vol = (unsigned char)val->intval;
-        ret = dc_power_set_vout(&opt[2]);
+        opt[i].vol = (unsigned char)val->intval;
+        ret = dc_power_set_vout(&opt[i]);
         break;
     case POWER_SUPPLY_ENABLE:
         for (i = 0; i < NODE_TOTAL; i++)
             if (opt[i].pdat != NULL)
             {
-                int tmp;
                 opt[i].en = val->intval ? true : false;
-                gpio_direction_output(opt[i].io, opt[i].en ? 1 : 0);
-                tmp = dc_power_set_enable(&opt[i]);
-                if (tmp > 0)
-                    ret = 0;
+                gpio_direction_output(opt[i].io, 
+                        opt[i].en ? POWER_GPIO_ENABLE : POWER_GPIO_DISABLE);
+                ret = 0;
             }
         break;
     case POWER_SUPPLY_ENABLE0:
-        if (opt[0].pdat == NULL)
-        {
-            ret = -1;
-            break;
-        }
-        opt[0].en = val->intval ? true : false;
-        ret = dc_power_set_enable(&opt[0]);
-        gpio_direction_output(opt[0].io, opt[0].en ? 1 : 0);
-        break;
     case POWER_SUPPLY_ENABLE1:
-        if (opt[1].pdat == NULL)
-        {
-            ret = -1;
-            break;
-        }
-        opt[1].en = val->intval ? true : false;
-        ret = dc_power_set_enable(&opt[1]);
-        gpio_direction_output(opt[1].io, opt[1].en ? 1 : 0);
-        break;
     case POWER_SUPPLY_ENABLE2:
-        if (opt[2].pdat == NULL)
-        {
-            ret = -1;
+        i = psp - POWER_SUPPLY_ENABLE0;
+        if (opt[i].pdat == NULL)
             break;
-        }
-        opt[2].en = val->intval ? true : false;
-        ret = dc_power_set_enable(&opt[2]);
-        gpio_direction_output(opt[2].io, opt[2].en ? 1 : 0);
+        opt[i].en = val->intval ? true : false;
+        gpio_direction_output(opt[i].io, 
+                opt[i].en ? POWER_GPIO_ENABLE : POWER_GPIO_DISABLE);
+        ret = 0;
         break;
     default:
         ret = -EINVAL;
@@ -295,7 +241,10 @@ static int dc_power_set_property(struct bitmicro_power_supply *psy,
 
     for (i = 0; i < NODE_TOTAL; i++)
         if (opt[i].pdat != NULL)
+        {
             mutex_unlock(&opt[i].pdat->mutex);
+            break;
+        }
 
     return ret;
 }

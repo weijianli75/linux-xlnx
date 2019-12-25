@@ -203,7 +203,7 @@ int general_power_probe(struct i2c_client *client, const struct i2c_device_id *i
 
     ret = general_power_get_model(power, power->model);
     if (ret < 0) {
-        printk("%s: read power model error, ret: %d\n", __func__, ret);
+        pr_err("%s: read power model error, ret: %d\n", __func__, ret);
         goto exit;
     }
 
@@ -211,6 +211,11 @@ int general_power_probe(struct i2c_client *client, const struct i2c_device_id *i
         sprintf(power->model, "P21-12-3600-D");
     } else if (strcmp(power->model, "P21") == 0) {
         sprintf(power->model, "P21-12-3600-C");
+    } else if (strcmp(power->model, "P20") == 0) {
+        sprintf(power->model, "P20-12-3600-C");
+    } else {
+        pr_err("%s: power model %s not supported\n", __func__, power->model);
+        goto exit;
     }
 
     power_supply_desc_init(power_desc, power->model, power->vender);

@@ -646,7 +646,9 @@ static int at24_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	if (err)
 		goto err_clients;
 
-	bitmicro_eeprom_link(&client->dev.kobj, client->addr);
+	if (bitmicro_eeprom_link(client) < 0)
+		dev_notice(&client->dev, "bitmicro eeprom link fail\n ");
+
 	i2c_set_clientdata(client, at24);
 
 	dev_info(&client->dev, "%zu byte %s EEPROM, %s, %u bytes/write\n",

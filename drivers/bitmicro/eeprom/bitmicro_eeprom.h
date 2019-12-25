@@ -13,6 +13,6 @@
 #include <linux/fs.h>
 #include <linux/uaccess.h>
 
-int __must_check bitmicro_eeprom_link(struct kobject *kobj, unsigned short addr);
+int bitmicro_eeprom_link(struct i2c_client *client);
 
 #endif
