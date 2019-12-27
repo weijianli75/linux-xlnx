@@ -8,12 +8,15 @@
 #include <linux/notifier.h>
 #include <linux/err.h>
 
+extern int is_s9_zynq(void);
+
 int bitmicro_eeprom_link(struct i2c_client *client)
 {
     static struct kobject *kobj_dir = NULL;
     static int init = 0;
     const __be32 *slot_be;
-    char name[64];
+    char name[64] = {0};
+    char *slot_name;
     int slot;
 
     if (!init)
@@ -24,11 +27,15 @@ int bitmicro_eeprom_link(struct i2c_client *client)
         init = 1;
     }
 
-    slot_be = of_get_property(client->dev.of_node, "slot", NULL);
-    if (slot_be)
-        slot = be32_to_cpup(slot_be);
+    if (is_s9_zynq())
+        slot_name = "s9_slot";
     else
+        slot_name = "slot";
+
+    slot_be = of_get_property(client->dev.of_node, slot_name, NULL);
+    if (!slot_be)
         return -1;
+    slot = be32_to_cpup(slot_be);
 
     snprintf(name, sizeof(name), "eeprom%d", slot);
     if (0 == sysfs_create_link(kobj_dir, &client->dev.kobj, name))

@@ -7,6 +7,8 @@
 #include <linux/mutex.h>
 #include <linux/delay.h>
 
+extern int is_s9_zynq(void);
+
 char *type_name[] = {
     "Non",
     "isl23315",
@@ -173,18 +175,24 @@ static int cat5410_get_dts_node(struct dc_data *data)
 
     for (i = 0; i< NODE_TOTAL; i++)
     {
-        snprintf(tmpbuf,sizeof(tmpbuf),"sel%d",i);
+        if (is_s9_zynq())
+            snprintf(tmpbuf,sizeof(tmpbuf),"s9_sel%d",i);
+        else
+            snprintf(tmpbuf,sizeof(tmpbuf),"sel%d",i);
         sel_be = of_get_property(data->client->dev.of_node, tmpbuf, NULL);
-        if (sel_be)
-            opt[i].selio = be32_to_cpup(sel_be);
-        else
+        if (!sel_be)
             return -1;
-        snprintf(tmpbuf,sizeof(tmpbuf),"io%d",i);
+        opt[i].selio = be32_to_cpup(sel_be);
+
+        if (is_s9_zynq())
+            snprintf(tmpbuf,sizeof(tmpbuf),"s9_io%d",i);
+        else
+            snprintf(tmpbuf,sizeof(tmpbuf),"io%d",i);
         io_be = of_get_property(data->client->dev.of_node, tmpbuf, NULL);
-        if (io_be)
-            opt[i].io = be32_to_cpup(io_be);
-        else
+        if (!io_be)
             return -1;
+        opt[i].io = be32_to_cpup(io_be);
+           
     }
     return 0;
 }
@@ -207,47 +215,49 @@ static int dc_isl23315_init(struct dc_data *data)
 {
     const __be32 *slot_be, *io_be;
     int slot, io;
+    char *name;
 
     // get dts node data
-    slot_be = of_get_property(data->client->dev.of_node, "slot", NULL);
-    if (slot_be)
-        slot = be32_to_cpup(slot_be);
+    if (is_s9_zynq())
+        name = "s9_slot";
     else
+        name = "slot";
+    slot_be = of_get_property(data->client->dev.of_node, name, NULL);
+    if (!slot_be)
+        return -1;
+    slot = be32_to_cpup(slot_be);
+
+    if (is_s9_zynq())
+        name = "s9_io";
+    else
+        name = "io";
+    io_be = of_get_property(data->client->dev.of_node, name, NULL);
+    if (!io_be)
+        return -1;
+    io = be32_to_cpup(io_be);
+
+    if (slot >= NODE_TOTAL)
         return -1;
 
-    io_be = of_get_property(data->client->dev.of_node, "io", NULL);
-    if (io_be)
-        io = be32_to_cpup(io_be);
-    else
+    if (opt[slot].io_req != -1)
         return -1;
-
-    if (slot < NODE_TOTAL)
+    if (request_io(io) < 0)
     {
-        if (opt[slot].io_req == -1)
-        {
-            if (request_io(io) < 0)
-            {
-                dev_info(&data->client->dev, "dc-dc isl23315 request io(%d) fail\n", io);
-                return -1;
-            }
-            opt[slot].io_req = 1;
-        }
-        else
-        {
-            return -1;
-        }
-        data->err = 0;
-        opt[slot].name = type_name[TYPE_ISL23315];
-        opt[slot].pdat = data;
-        opt[slot].type = TYPE_ISL23315; 
-        opt[slot].io = io;
-        dc_power_set_vout(&opt[slot]);
-        gpio_direction_output(opt[slot].io, 
-                opt[slot].en ? POWER_GPIO_ENABLE : POWER_GPIO_DISABLE);
-        return 0;
+        dev_info(&data->client->dev, "dc-dc isl23315 request io(%d) fail\n", io);
+        return -1;
     }
-    return -1;
-} 
+    opt[slot].io_req = 1;
+
+    data->err = 0;
+    opt[slot].name = type_name[TYPE_ISL23315];
+    opt[slot].pdat = data;
+    opt[slot].type = TYPE_ISL23315;
+    opt[slot].io = io;
+    dc_power_set_vout(&opt[slot]);
+    gpio_direction_output(opt[slot].io, 
+            opt[slot].en ? POWER_GPIO_ENABLE : POWER_GPIO_DISABLE);
+    return 0;
+}
 
 static int request_sel(int sel)
 {

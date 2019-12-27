@@ -50,6 +50,28 @@
 
 void __iomem *zynq_scu_base;
 
+#define ZYNQ_VERSION_REG 0x43c00800
+int is_s9_zynq(void)
+{
+	static int is_s9 = -1;
+	void *version_reg;
+	unsigned int version;
+
+	if (is_s9 >= 0)
+		return is_s9;
+
+	version_reg = ioremap(ZYNQ_VERSION_REG, 4);
+	version = readl(version_reg);
+	iounmap(version_reg);
+
+	printk("ZYNQ version %x", version);
+	if (version & 0x80000000)
+		is_s9 = 1;
+	else
+		is_s9 = 0;
+	return is_s9;
+}
+
 /**
  * zynq_memory_init - Initialize special memory
  *

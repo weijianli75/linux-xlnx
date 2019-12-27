@@ -81,6 +81,7 @@ static struct class hwmon_class = {
 
 static DEFINE_IDA(hwmon_ida);
 
+extern int is_s9_zynq(void);
 /**
  * hwmon_device_register_with_groups - register w/ hwmon
  * @dev: the parent device
@@ -125,7 +126,10 @@ hwmon_device_register_with_groups(struct device *dev, const char *name,
 
 	params = sscanf(dev->of_node->full_name, "/amba/i2c@e0004000/lm75@%x", &addr);
 	if (params == 1) {
-        id = addr - 0x48;
+		if (is_s9_zynq())
+			id = 0x4b - addr;
+		else
+			id = addr - 0x48;
 	}
 
 	params = sscanf(dev->of_node->full_name, "/amba/i2c@e0004000/tmp421@%x", &addr);

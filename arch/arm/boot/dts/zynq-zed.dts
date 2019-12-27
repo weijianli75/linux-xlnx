@@ -32,7 +32,7 @@
 
 	memory {
 		device_type = "memory";
-		reg = <0x0 0x20000000>;
+		reg = <0x0 0x10000000>;
 	};
 
 	chosen {
@@ -160,15 +160,22 @@
         reg = <0x28>;
     };
 
-    dcdcc0@28 {
+    dcdc@28 {
         compatible = "isl,dc-dc";
         reg = <0x28>;
-        io0 = <96>;	//enable
-        io1 = <97>;
-        io2 = <98>;
-        sel0 = <99>;
-        sel1 = <100>;
-        sel2 = <101>;
+        io0 = <934>;	//enable
+        io1 = <939>;
+        io2 = <937>;
+        sel0 = <960>;
+        sel1 = <962>;
+        sel2 = <964>;
+
+        s9_io0 = <941>;
+        s9_io1 = <940>;
+        s9_io2 = <939>;
+        s9_sel0 = <961>;
+        s9_sel1 = <963>;
+        s9_sel2 = <965>;
     };
 
     dcdc0@50 {
@@ -185,6 +192,9 @@
         pagesize = <8>;
         slot = <1>;
         io = <939>;
+
+        s9_slot = <2>;
+        s9_io = <939>;
     };
 
     dcdc2@52 {
@@ -193,6 +203,17 @@
         pagesize = <8>;
         slot = <2>;
         io = <937>;
+
+        s9_slot = <1>;
+        s9_io = <940>;
+    };
+
+    dcdc0@53 {
+        compatible = "isl,dc-dc","atmel,24c01";
+        reg = <0x53>;
+        pagesize = <8>;
+        s9_slot = <0>;
+        s9_io = <941>;
     };
 
     eeprom@54 {
@@ -207,6 +228,7 @@
         reg = <0x55>;
         pagesize = <8>;
         slot = <1>;
+        s9_slot = <2>;
     };
 
     eeprom@56 {
@@ -214,19 +236,34 @@
         reg = <0x56>;
         pagesize = <8>;
         slot = <2>;
+        s9_slot = <1>;
+    };
+
+    eeprom@57 {
+        compatible = "atmel,24c01";
+        reg = <0x57>;
+        pagesize = <8>;
+        s9_slot = <0>;
     };
 
     lm75@48 {
         compatible = "national,lm75";
         reg = <0x48>;
     };
+
     lm75@49 {
         compatible = "national,lm75";
         reg = <0x49>;
     };
+
     lm75@4a {
         compatible = "national,lm75";
         reg = <0x4a>;
+    };
+
+    lm75@4b {
+        compatible = "national,lm75";
+        reg = <0x4b>;
     };
 
     tmp421@40 {

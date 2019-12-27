@@ -1076,6 +1076,8 @@ static const char *hwcap2_str[] = {
 	NULL
 };
 
+extern int is_s9_zynq(void);
+
 static int c_show(struct seq_file *m, void *v)
 {
 	int i, j;
@@ -1135,7 +1137,10 @@ static int c_show(struct seq_file *m, void *v)
 		seq_printf(m, "CPU revision\t: %d\n\n", cpuid & 15);
 	}
 
-	seq_printf(m, "Hardware\t: %s\n", machine_name);
+	if (is_s9_zynq())
+		seq_printf(m, "Hardware\t: %s S9\n", machine_name);
+	else
+		seq_printf(m, "Hardware\t: %s\n", machine_name);
 	seq_printf(m, "Revision\t: %04x\n", system_rev);
 	seq_printf(m, "Serial\t\t: %s\n", system_serial);
 
