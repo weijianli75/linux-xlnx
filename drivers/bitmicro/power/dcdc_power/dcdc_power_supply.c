@@ -156,10 +156,9 @@ static int dc_power_get_property(struct bitmicro_power_supply *psy,
         val->intval = 0;
         break;
     case POWER_SUPPLY_HW_VERSION:
-        val->strval = hw_version;
-        for (i = 0; i < NODE_TOTAL; i++)
-            if (opt[i].name)
-                val->strval = opt[i].name;
+        snprintf(hw_version, sizeof(hw_version), "%.8s_%.8s_%.8s",
+                opt[0].name, opt[1].name, opt[2].name);
+        val->strval = hw_version;   
         break;
     case POWER_SUPPLY_SW_VERSION:
         val->strval = sw_version;

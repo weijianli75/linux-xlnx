@@ -8,41 +8,48 @@
 #include <linux/delay.h>
 
 char *type_name[] = {
-    "",
+    "Non",
     "isl23315",
     "cat5140",  //upgrade-whatsminer->detect-platform.sh
 };
-char hw_version[] = "dc";
+
+char hw_version[HW_DESC_NAME_LEN];
 char sw_version[] = "10";
 
 struct dc_opt opt[NODE_TOTAL] = {
     [0] = {
-        .name = NULL,
+        .name = "Non",
         .pdat = NULL,
         .type = TYPE_NONE,
         .vol = 255,
         .io = -1,
+        .io_req = -1,
         .selio = -1,
+        .sel_req = -1,
         .en = false,
     },
 
     [1] = {
-        .name = NULL,
+        .name = "Non",
         .pdat = NULL,
         .type = TYPE_NONE,
         .vol = 255,
         .io = -1,
+        .io_req = -1,
         .selio = -1,
+        .sel_req = -1,
         .en = false,
     },
 
     [2] = {
-        .name = NULL,
+        .name = "Non",
         .pdat = NULL,
         .type = TYPE_NONE,
         .vol = 255,
         .io = -1,
+        .io_req = -1,
         .selio = -1,
+        .sel_req = -1,
         .en = false,
     },
 };
@@ -147,9 +154,15 @@ void cat5410_sel_switch(int selio)
 {
     int i;
     for (i = 0; i < NODE_TOTAL; i++)
-        gpio_direction_output(opt[i].selio, CAT_GPIO_SEL_DISABLE);
+    {
+        if (opt[i].sel_req != -1)
+        {
+            gpio_direction_output(opt[i].selio, CAT_GPIO_SEL_DISABLE);
+        }
+    }
 
-    gpio_direction_output(selio, CAT_GPIO_SEL_ENABLE);
+    if (opt[selio].sel_req != -1)
+        gpio_direction_output(selio, CAT_GPIO_SEL_ENABLE);
 }
 
 static int cat5410_get_dts_node(struct dc_data *data)
@@ -176,6 +189,20 @@ static int cat5410_get_dts_node(struct dc_data *data)
     return 0;
 }
 
+static int request_io(int io)
+{
+    char name[8];
+    snprintf(name, sizeof(name), "io%d", io);
+    if (gpio_request(io, name) < 0)
+        return -1;
+    return 0;
+}
+
+static void free_io(int io)
+{
+    gpio_free(io);
+}
+
 static int dc_isl23315_init(struct dc_data *data)
 {
     const __be32 *slot_be, *io_be;
@@ -196,51 +223,57 @@ static int dc_isl23315_init(struct dc_data *data)
 
     if (slot < NODE_TOTAL)
     {
-        data->err = 0;                
+        if (opt[slot].io_req == -1)
+        {
+            if (request_io(io) < 0)
+            {
+                dev_info(&data->client->dev, "dc-dc isl23315 request io(%d) fail\n", io);
+                return -1;
+            }
+            opt[slot].io_req = 1;
+        }
+        else
+        {
+            return -1;
+        }
+        data->err = 0;
         opt[slot].name = type_name[TYPE_ISL23315];
         opt[slot].pdat = data;
-        opt[slot].type = TYPE_ISL23315;
+        opt[slot].type = TYPE_ISL23315; 
         opt[slot].io = io;
         dc_power_set_vout(&opt[slot]);
         gpio_direction_output(opt[slot].io, 
                 opt[slot].en ? POWER_GPIO_ENABLE : POWER_GPIO_DISABLE);
-        dev_info(&data->client->dev, "Power supply isl23315 dc-dc probed ok.\n");
         return 0;
     }
     return -1;
 } 
 
-static int request_sel(int idx)
+static int request_sel(int sel)
 {
     char name[8];
-    if (opt[idx].selio == -1)
+    snprintf(name, sizeof(name), "sw%d", sel);
+    if (gpio_request(sel, name) < 0)
         return -1;
-    snprintf(name, sizeof(name), "sw%d", idx);
-    if (gpio_request(opt[idx].selio, name) < 0)
-    {
-        opt[idx].selio = -1;
-        return -1;
-    }
     return 0;
 }
 
-static void free_sel(int idx)
+static void free_sel(int sel)
 {
-    if (opt[idx].selio != -1)
-    {
-        gpio_free(opt[idx].selio);
-        opt[idx].selio = -1;
-    }
+    gpio_free(sel);
 }
 
 static int dc_detect_and_init(struct dc_data *data)
 {
-    int ret, cnt, cat_cnt, i;
+    int this_req[NODE_TOTAL];
+    int ret, slot, cat_cnt, i;
     int retry = 2;
     unsigned char buf[8];
 
     mutex_lock(&data->mutex);
+
 l_retry:
+
     buf[0] = 0; //start addr
     ret = i2c_read_bytes(data->client, buf, 1 + 2);
     if (ret < 0)
@@ -276,42 +309,70 @@ l_retry:
     goto exit_isl;
 
 test_cat5140:   //detect and init
+
     if (cat5410_get_dts_node(data) < 0)
         goto exit_err;
 
+    memset(this_req, 0, sizeof(this_req));
     for (i = 0; i < NODE_TOTAL; i++)
     {
-        if (request_sel(i) < 0)
-            goto exit_err;
+        if (opt[i].sel_req == -1)
+        {
+            if (request_sel(opt[i].selio) < 0)
+            {
+                dev_info(&data->client->dev, "dc-dc cat5410 request sel(%d) fail\n", opt[i].selio);
+                continue;
+            }
+            opt[i].sel_req = 1;
+            this_req[i] = 1;
+        } 
     }
 
-    for (cnt = 0, cat_cnt = 0; cnt < NODE_TOTAL; cnt++)
-    {
-        cat5410_sel_switch(opt[cnt].selio);
-        buf[0] = REG_DEV_ID; //device id reg
-        if (i2c_read_bytes(data->client, buf, 1 + 1) < 0)        
+    for (slot = 0, cat_cnt = 0; slot < NODE_TOTAL; slot++)
+    {     
+        if (this_req[slot] == 0)
             continue;
+        cat5410_sel_switch(opt[slot].selio);
+        buf[0] = REG_DEV_ID; //device id reg
+        if (i2c_read_bytes(data->client, buf, 1 + 1) < 0)//dc_read_reg_one_byte
+            goto L_release;
         if (buf[1] == CAT_DEVICE_ID)
         {
             #define GENERAL_REG_TOTAL   5
             //test general purpose reg
             buf[0] = 0x02; //start addr
             if (i2c_read_bytes(data->client, buf, 1 + GENERAL_REG_TOTAL) < 0)
-                continue;
+                goto L_release;
             for (i = 0; i < GENERAL_REG_TOTAL; i++)
                 if (buf[i+1] != 0x0)
                     break;
             if (i < GENERAL_REG_TOTAL)
-                continue;
+                goto L_release;
+            if (opt[slot].io_req == -1)
+            {
+                if (request_io(opt[slot].io) < 0)
+                {
+                    dev_info(&data->client->dev, "dc-dc cat5410 request io(%d) fail\n", opt[slot].io);
+                    goto L_release;            
+                }
+                opt[slot].io_req = 1;
+            }
+            else
+                goto L_release;
             data->err = 0;
-            opt[cnt].name = type_name[TYPE_CAT5140];
-            opt[cnt].type = TYPE_CAT5140;
-            opt[cnt].pdat = data;//3 cat5140 opt share 1 dc_data
-            dc_power_set_vout(&opt[cnt]);
-            gpio_direction_output(opt[cnt].io, 
-                    opt[cnt].en ? POWER_GPIO_ENABLE : POWER_GPIO_DISABLE);
-            cat_cnt++;
-        }
+            opt[slot].name = type_name[TYPE_CAT5140];
+            opt[slot].type = TYPE_CAT5140;
+            opt[slot].pdat = data;//3 cat5140 opt share 1 dc_data        
+            dc_write_reg_one_byte(opt[slot].pdat, REG_ACR, CAT_VOL);
+            dc_power_set_vout(&opt[slot]);
+            gpio_direction_output(opt[slot].io, 
+                    opt[slot].en ? POWER_GPIO_ENABLE : POWER_GPIO_DISABLE);
+            cat_cnt++;          
+            continue;
+        }        
+        L_release:    
+        free_sel(opt[slot].selio);      
+        opt[slot].sel_req = -1;
     }
 
     if (cat_cnt > 0)
@@ -320,13 +381,9 @@ test_cat5140:   //detect and init
         mutex_unlock(&data->mutex);
         return TYPE_CAT5140;        
     }
-
-    for (i = 0; i < NODE_TOTAL; i++)
-        free_sel(i);
-
     goto exit_err;
 exit_isl:
-    printk("0x%x is isl23315 dcdc device\n", data->client->addr);
+    dev_info(&data->client->dev, " is isl23315 device .\n");
     mutex_unlock(&data->mutex);
     ret = dc_isl23315_init(data);
     if (ret < 0)
@@ -383,8 +440,10 @@ static int dc_power_remove(struct i2c_client *client)
     struct dc_data *data = (struct dc_data *)i2c_get_clientdata(client);
     for (i = 0; i< NODE_TOTAL; i++)
     {
-        if (opt[i].selio != -1)
-            gpio_free(opt[i].selio);
+        if (opt[i].sel_req != -1)
+            free_sel(opt[i].selio);
+        if (opt[i].io_req != -1)
+            free_io(opt[i].io);
     }
     kfree(data);
     return 0;
@@ -392,8 +451,8 @@ static int dc_power_remove(struct i2c_client *client)
 
 static const struct i2c_device_id dc_power_id[] = {
     {"dc-dc"},
-    {}};
-
+    {}
+};
 
 static const struct of_device_id dc_power_of_match[] = {
     {.compatible = "isl,dc-dc"},

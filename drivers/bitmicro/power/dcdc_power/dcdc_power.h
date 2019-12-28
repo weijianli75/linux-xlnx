@@ -24,6 +24,9 @@ enum EDC_TYPE{
 #define REG_ACR                 0x08
 #define CAT_DEVICE_ID           0xd0
 
+#define CAT_NON_VOL             0x0
+#define CAT_VOL                 0x80
+
 #if 1
 #define CAT_GPIO_SEL_DISABLE        1
 #define CAT_GPIO_SEL_ENABLE         0
@@ -37,6 +40,8 @@ enum EDC_TYPE{
 
 #define NODE_TOTAL              3
 
+#define HW_DESC_NAME_LEN               (9*3+1)
+
 struct dc_data
 {
         struct i2c_client *client;
@@ -49,14 +54,16 @@ struct dc_opt
         char *name;
         struct dc_data *pdat;
         int io;        //enable gpio
+        int io_req;
         int selio;
+        int sel_req;
         unsigned char type;     //dcdc ic type
         unsigned char vol;
         bool en;
 };
 
+extern char hw_version[HW_DESC_NAME_LEN];
 extern char sw_version[];
-extern char hw_version[];
 extern struct dc_opt opt[NODE_TOTAL];
 
 int dc_read_reg_one_byte(struct dc_data *power, unsigned char reg, unsigned char *val);
