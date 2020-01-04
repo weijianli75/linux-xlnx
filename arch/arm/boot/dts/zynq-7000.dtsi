@@ -263,11 +263,11 @@
 				};
 				partition@nand-rootfs {
 					label = "rootfs";
-					reg = <0x1580000 0xe600000>;
+					reg = <0x1580000 0xc600000>;
 				};
-				partition@nand-badblocktable {
-					label = "bbt";
-					reg = <0xff00000 0x100000>;
+				partition@nand-data {
+					label = "data";
+					reg = <0xdb80000 0x2000000>;
 				};
 				
 			};
