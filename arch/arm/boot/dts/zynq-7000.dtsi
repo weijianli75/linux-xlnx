@@ -263,10 +263,14 @@
 				};
 				partition@nand-rootfs {
 					label = "rootfs";
-					reg = <0x1580000 0xc600000>;
+					reg = <0x1580000 0xa600000>;
 				};
 				partition@nand-data {
 					label = "data";
+					reg = <0xbb80000 0x2000000>;
+				};
+				partition@nand-data-bak {
+					label = "data_bak";
 					reg = <0xdb80000 0x2000000>;
 				};
 				
