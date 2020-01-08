@@ -49,11 +49,11 @@ mount -o ro -t ubifs ubi0:rootfs $system_dir
 
 ubiattach /dev/ubi_ctrl -m 8
 wait_for_ready /dev/ubi1
-mount -t ubifs ubi1:data /data
+mount -t ubifs ubi1:data $system_dir/data
 
 ubiattach /dev/ubi_ctrl -m 9
 wait_for_ready /dev/ubi2
-mount -t ubifs ubi2:data /data_bak
+mount -t ubifs ubi2:data $system_dir/data_bak
 
 
 log "======================ramdisk end===================="
