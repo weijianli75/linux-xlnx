@@ -27,7 +27,7 @@ wait_for_ready()
 {
 	CNT=10
 	while true; do
-		if [ -b $1 ]; then
+		if [ -c $1 ]; then
 			return 0
 		fi
 		
