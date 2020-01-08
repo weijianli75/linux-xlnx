@@ -1,8 +1,5 @@
 #!/bin/sh
 
-data_part="/dev/nandf"
-data_bak_part="/dev/nandg"
-system_part="/dev/nandd"
 system_dir="/root"
 log_path="/dev/kmsg"
 
@@ -17,194 +14,6 @@ mount_part() {
 	return $?
 }
 
-is_critical_data_files_ok() {
-	ok=1
-	mount_part $1 /mnt
-	if [ $? -ne 0 ]; then
-		return 0
-	fi
-
-	if [ ! -f /mnt/etc/init.d/boot ]; then
-		ok=0
-		log "file /etc/init.d/boot not exist"
-	fi
-
-	if [ ! -f /mnt/etc/config/network ]; then
-		ok=0
-		log "file /etc/config/network not exist"
-	fi
-
-	umount /mnt
-	return $ok
-}
-
-is_part_ok() {
-	log "check partition $1"
-	if [ ! -b $1 ]; then
-		log "$1 doesn't exist"
-		return 0
-	fi
-
-	e2fsck -y $1
-	if [ $? -gt 1 ]; then
-		log "$1 hasn't ext4"
-		return 0
-	fi
-
-	is_critical_data_files_ok $1
-	if [ $? -eq 0 ]; then
-		log "Error critical files in $1 missing"
-		return 0
-	fi
-
-	log "$1 has ext4"
-	return 1
-}
-
-format_data_part() {
-	log "format_data_part $1"
-	mkfs.ext4 -jqF $1
-
-	return $?
-}
-
-is_first_boot_or_both_data_parts_broken() {
-	is_part_ok $data_part
-	if [ $? -eq 1 ]; then
-		 return 0
-	fi
-	is_part_ok $data_bak_part
-	if [ $? -eq 1 ]; then
-		 return 0
-	fi
-
-	return 1
-}
-
-prepare_data_part() {
-	if [ ! -b $1 ]; then
-		return 1
-	fi
-
-	log "prepare_data_part $1"
-	format_data_part $1
-	if [ $? -ne 0 ]; then
-		log "format_data_part $1 failed"
-		return 1
-	fi
-
-	mount_part $1 $2
-	if [ $? -ne 0 ]; then
-		return 1
-	fi
-
-	if [ -d $system_dir/etc ] && [ ! -L $system_dir/etc ]; then
-		log "cp -ar $system_dir/etc $2/"
-		cp -ar $system_dir/etc $2/
-		cp -ar $system_dir/root/.events $2/
-	else
-		if [ -d $system_dir/data/etc ]; then
-			log "cp -ar $system_dir/data/etc $2/"
-			cp -ar $system_dir/data/etc $2/
-			cp -ar $system_dir/data/.events $2/
-		else
-			log "cp -ar $system_dir/etc_bak $2/etc"
-			cp -ar $system_dir/etc_bak $2/etc
-			mkdir $2/.events
-		fi
-	fi
-
-	sync
-
-	return 0
-}
-
-link_system_to_data_part() {
-	if [ -L $system_dir/etc ] && [ -L $system_dir/root/.events ]; then
-		return
-	fi
-
-	log "link_system_to_data_part"
-	mv $system_dir/etc $system_dir/etc_bak
-	ln -s /data/etc $system_dir/etc
-	rm -rf $system_dir/root/.events
-	ln -s /data/.events $system_dir/root/.events
-	sync
-}
-
-# Power loss protection for changing system
-make_sure_link_system_to_data_part() {
-	if [ -L $system_dir/etc ] && [ -L $system_dir/root/.events ]; then
-		return
-	fi
-
-	log "Link system to data again as power loss may ocurred during changing system at last time"
-	mount -o remount,rw $system_part $system_dir
-
-	mkdir -p $system_dir/data $system_dir/data_bak
-
-	link_system_to_data_part
-
-	mount -o remount,ro $system_part $system_dir 
-}
-
-prepare_data_parts() {
-	mount -o remount,rw $system_part $system_dir
-
-	mkdir -p $system_dir/data $system_dir/data_bak $system_dir/root/.events
-
-	prepare_data_part $data_part $system_dir/data
-
-	if [ $? -eq 0 ]; then
-		prepare_data_part $data_bak_part $system_dir/data_bak
-	else
-		prepare_data_part $data_bak_part $system_dir/data
-	fi
-
-	link_system_to_data_part
-
-	mount -o remount,ro $system_part $system_dir 
-}
-
-check_and_mount_part() {
-	is_part_ok $1
-	if [ $? -eq 0 ]; then
-		return 1
-	fi
-
-	mount_part $1 $2
-	return $?
-}
-
-check_and_mount_data_parts() {
-	check_and_mount_part $data_part $system_dir/data
-	if [ $? -ne 0 ];then
-		check_and_mount_part $data_bak_part $system_dir/data
-		if [ $? -eq 0 ]; then
-			prepare_data_part $data_part $system_dir/data_bak
-		else
-			prepare_data_parts
-		fi
-		return
-	fi
-
-	check_and_mount_part $data_bak_part $system_dir/data_bak
-	if [ $? -ne 0 ]; then
-		prepare_data_part $data_bak_part $system_dir/data_bak
-	fi
-}
-
-use_data_parts() {
-	is_first_boot_or_both_data_parts_broken
-	if [ $? -eq 1 ]; then
-		log "prepare_data_parts"
-		prepare_data_parts
-	else
-		log "check_and_mount_data_parts"
-		check_and_mount_data_parts
-	fi
-}
-
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
 mount -t devtmpfs none /dev
@@ -212,22 +21,6 @@ mount -t devtmpfs none /dev
 log "======================ramdisk start===================="
 
 exec < /dev/console > /dev/console 2>&1
-
-for parm in $(cat /proc/cmdline); do
-	case $parm in
-	ramfs)
-		RAMFS_MODE=1
-		;;  
-	root=*)
-		ROOT_DEVICE=`echo $parm | awk -F\= '{print $2}'`
-		;;
-	esac
-done
-
-if [ "x$ROOT_DEVICE" = "x" ]; then
-	ROOT_DEVICE=autoconfig
-fi
-log [$0]: RootDevice is \"$ROOT_DEVICE\"
 
 # $1: the name of block device
 wait_for_ready()
@@ -250,94 +43,20 @@ wait_for_ready()
 }
 
 # $1: The block device
-do_mount()
-{
-	HAS_JOURNAL=`tune2fs -l $1 | grep has_journal`
-	if [ "$HAS_JOURNAL" = "" ]; then
-		log "Add journal for $1"
-		tune2fs -j $1
-	else
-		log "$1 already has journal"
-	fi
+ubiattach /dev/ubi_ctrl -m 7
+wait_for_ready /dev/ubi0
+mount -o ro -t ubifs ubi0:rootfs $system_dir
 
-	log "e2fsck -y $1"
-	e2fsck -y $1
+ubiattach /dev/ubi_ctrl -m 8
+wait_for_ready /dev/ubi1
+mount -t ubifs ubi1:data /data
 
-	log "mount $1 on $system_dir temporarily"
-	mount -o ro,noatime,nodiratime,norelatime,data=journal -t ext4 $1 $system_dir
-	if [ $? -ne 0 ]; then
-		log [$0]: Failed to mount $1!
-	fi
+ubiattach /dev/ubi_ctrl -m 9
+wait_for_ready /dev/ubi2
+mount -t ubifs ubi2:data /data_bak
 
-	if [ "$1" = "/dev/nandd" ]; then
-		data_part="/dev/nandf"
-		data_bak_part="/dev/nandg"
-	else
-		data_part="/dev/mmcblk0p9"
-		data_bak_part="/dev/mmcblk0p10"
-	fi
-
-	system_part=$1
-	use_data_parts
-	make_sure_link_system_to_data_part
-}
-
-load_nand()
-{
-	log [$0]: Try to load Nand ...
-
-	NAND_MODULE=/lib/modules/$(uname -r)/nand.ko
-	if [ ! -f $NAND_MODULE ]; then
-		log [$0]: $NAND_MODULE does not exist!
-		return 1
-	fi
-
-	insmod $NAND_MODULE
-	if [ $? -ne 0 ]; then
-		log [$0]: $NAND_MODULE is invalid!
-		return 2
-	fi
-	wait_for_ready /dev/nandd
-	if [ $? -eq 0 ]; then
-		do_mount /dev/nandd
-	fi
-}
-
-load_emmc()
-{
-	log [$0]: Try to load EMMC ...
-	
-	wait_for_ready /dev/mmcblk0p7
-	if [ $? -eq 0 ]; then
-		do_mount /dev/mmcblk0p7
-	fi
-}
-
-case $ROOT_DEVICE in
-	/dev/nand*|/dev/system)
-		load_nand
-		;;
-	/dev/mmc*)
-		load_emmc
-		;;
-	autoconfig*)
-		sleep 1;
-        if cat /proc/partitions|grep "mmcblk0p7" >/dev/null;then
-            magic_num=$(hexdump -s 1292 -n 2 -x /dev/mmcblk0p7|head -1|awk '{print $2 }')
-            if log $magic_num|grep "f30a" >/dev/null;then
-				load_emmc
-            fi
-        else
-			load_nand
-		fi
-		;;
-	*)
-		log [$0]: "Use default type"
-		;;
-esac
 
 log "======================ramdisk end===================="
 
 [ -x $system_dir/sbin/init ] && exec switch_root $system_dir /sbin/init
 [ -x $system_dir/init ] && exec switch_root $system_dir /init
-#/sbin/getty -L ttyS0 115200 vt100 -n -l /bin/ash
